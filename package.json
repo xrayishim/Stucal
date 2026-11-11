@@ -1,0 +1,26 @@
+{
+  "name": "stucal",
+  "version": "1.0.0",
+  "description": "Text reminders before assignments are due",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --no-warnings src/server.js",
+    "test": "node --test --no-warnings"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xrayishim/Stucal.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/xrayishim/Stucal/issues"
+  },
+  "homepage": "https://github.com/xrayishim/Stucal#readme",
+  "dependencies": {
+    "express": "^4.22.3"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "private": true
+}

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stucal</title>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --text:#1a1d29; --muted:#6b7085; --line:#e4e6ef; --accent:#4f46e5; --accent-text:#fff; --danger:#c2410c; --ok:#15803d; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1117; --card:#181b24; --text:#eceef5; --muted:#9097ad; --line:#2a2e3b; --accent:#818cf8; --accent-text:#0f1117; --danger:#fb923c; --ok:#4ade80; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:32px 16px 64px; }
+  h1 { font-size:28px; margin:0 0 4px; } h2 { font-size:17px; margin:0 0 12px; }
+  .sub { color:var(--muted); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-size:14px; color:var(--muted); margin:10px 0 4px; }
+  input, select { width:100%; padding:11px 12px; font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:10px; }
+  button { font:inherit; font-weight:600; padding:11px 16px; border-radius:10px; border:0; background:var(--accent); color:var(--accent-text); cursor:pointer; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); font-weight:500; }
+  .row { display:flex; flex-wrap:wrap; gap:0 10px; } .row > * { flex:1 1 200px; min-width:0; }
+  .mt { margin-top:14px; } .err { color:var(--danger); font-size:14px; min-height:20px; margin-top:8px; }
+  .hint { font-size:13px; color:var(--muted); margin-top:6px; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
+  li:first-child { border-top:0; }
+  li input[type=checkbox] { width:20px; height:20px; flex:none; }
+  li .t { flex:1; min-width:0; } li .t b { display:block; overflow-wrap:anywhere; } li .t span { font-size:13px; color:var(--muted); }
+  li.done b { text-decoration:line-through; color:var(--muted); }
+  li .x { background:none; color:var(--muted); padding:4px 8px; font-weight:400; }
+  .pill { display:inline-block; font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .banner { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .price { font-size:22px; font-weight:700; } .price small { font-size:14px; color:var(--muted); font-weight:400; }
+  .hidden { display:none !important; }
+  details summary { cursor:pointer; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Stucal</h1>
+  <p class="sub">Get a text before every assignment is due. $4.99/month.</p>
+
+  <!-- login -->
+  <section id="login" class="card hidden">
+    <h2>Log in or sign up</h2>
+    <form id="phoneForm">
+      <label for="phone">Phone number</label>
+      <input id="phone" type="tel" autocomplete="tel" placeholder="(555) 123-4567" required>
+      <button class="mt" style="width:100%">Text me a code</button>
+    </form>
+    <form id="codeForm" class="hidden">
+      <label for="code">6-digit code</label>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+      <button class="mt" style="width:100%">Continue</button>
+      <p class="hint" id="devHint"></p>
+    </form>
+    <div class="err" id="loginErr"></div>
+    <p class="hint">First 14 days free. No card needed to start.</p>
+  </section>
+
+  <!-- app -->
+  <section id="app" class="hidden">
+    <div class="card banner" id="planCard"></div>
+
+    <div class="card">
+      <h2>Coming up</h2>
+      <ul id="list"></ul>
+      <p class="hint" id="empty">Nothing yet. Add an assignment below or connect your school calendar.</p>
+    </div>
+
+    <div class="card">
+      <h2>Add an assignment</h2>
+      <form id="addForm">
+        <label for="title">What is it?</label>
+        <input id="title" placeholder="Lab report 3" required>
+        <div class="row">
+          <div><label for="course">Class</label><input id="course" placeholder="Chem 101"></div>
+          <div><label for="due">Due</label><input id="due" type="datetime-local" required></div>
+        </div>
+        <button class="mt">Add</button>
+        <div class="err" id="addErr"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+      <form id="settingsForm">
+        <label for="remind">Text me</label>
+        <select id="remind">
+          <option value="1">1 hour before</option>
+          <option value="3">3 hours before</option>
+          <option value="12">12 hours before</option>
+          <option value="24">1 day before</option>
+          <option value="48">2 days before</option>
+        </select>
+        <label for="cal">School calendar link (optional)</label>
+        <input id="cal" type="url" placeholder="https://yourschool.instructure.com/feeds/calendars/…ics">
+        <details class="mt"><summary>Where do I find this?</summary>
+          <p class="hint"><b>Canvas:</b> Calendar → "Calendar Feed" at the bottom right → copy the link.<br>
+          <b>Blackboard:</b> Calendar → gear icon → "Share calendar" → copy the iCal link.<br>
+          <b>Google Classroom:</b> open the class calendar in Google Calendar → Settings → "Secret address in iCal format".<br>
+          <b>Moodle:</b> Calendar → "Export calendar" → "Get calendar URL".</p>
+        </details>
+        <button class="mt">Save</button>
+        <div class="err" id="setErr"></div>
+      </form>
+    </div>
+
+    <button class="ghost" id="logout">Log out</button>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let phone = '';
+let me = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { method: opts.body ? 'POST' : 'GET', ...opts, headers: { 'Content-Type': 'application/json' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || 'Something went wrong'), { status: res.status });
+  return data;
+}
+
+function fmtDue(iso) {
+  const d = new Date(iso), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const days = Math.round((new Date(d.toDateString()) - new Date(now.toDateString())) / 864e5);
+  if (days === 0) return `Today, ${time}`;
+  if (days === 1) return `Tomorrow, ${time}`;
+  if (days === -1) return `Yesterday, ${time}`;
+  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + `, ${time}`;
+}
+
+function renderPlan() {
+  const c = $('planCard');
+  if (me.plan === 'active') {
+    c.innerHTML = `<div><b>You're subscribed</b><div class="hint">Reminders go to ${me.phone}</div></div>` +
+      (me.billingEnabled ? `<button class="ghost" id="manage">Manage</button>` : '');
+  } else {
+    const left = Math.ceil((new Date(me.trialEndsAt) - Date.now()) / 864e5);
+    const status = me.remindersOn ? `Free trial: ${left} day${left === 1 ? '' : 's'} left` : 'Reminders are paused';
+    c.innerHTML = `<div><b>${status}</b><div class="price">$4.99 <small>/ month</small></div></div>
+      <button id="subscribe">Subscribe</button>`;
+  }
+  $('subscribe')?.addEventListener('click', () => go('/api/billing/checkout'));
+  $('manage')?.addEventListener('click', () => go('/api/billing/portal'));
+}
+
+async function go(path) {
+  try { location.href = (await api(path, { method: 'POST' })).url; } catch (e) { alert(e.message); }
+}
+
+async function loadList() {
+  const { assignments } = await api('/api/assignments');
+  $('empty').classList.toggle('hidden', assignments.length > 0);
+  $('list').innerHTML = '';
+  for (const a of assignments) {
+    const li = document.createElement('li');
+    if (a.done) li.className = 'done';
+    li.innerHTML = `<input type="checkbox" ${a.done ? 'checked' : ''} aria-label="Mark done">
+      <div class="t"><b></b><span></span></div><button class="x" aria-label="Delete">✕</button>`;
+    li.querySelector('b').textContent = a.title;
+    li.querySelector('span').textContent = [a.course, fmtDue(a.dueAt), a.remindedAt ? 'texted ✓' : ''].filter(Boolean).join(' · ');
+    li.querySelector('input').onchange = async (e) => { await api(`/api/assignments/${a.id}`, { method: 'PATCH', body: { done: e.target.checked } }); loadList(); };
+    li.querySelector('.x').onclick = async () => { await api(`/api/assignments/${a.id}`, { method: 'DELETE' }); loadList(); };
+    $('list').append(li);
+  }
+}
+
+function showApp() {
+  $('login').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  renderPlan();
+  $('remind').value = String(me.remindHours);
+  if (!$('remind').value) $('remind').value = '24';
+  $('cal').value = me.calendarUrl || '';
+  loadList();
+}
+
+$('phoneForm').onsubmit = async (e) => {
+  e.preventDefault(); $('loginErr').textContent = '';
+  try {
+    phone = $('phone').value;
+    const r = await api('/api/auth/start', { body: { phone } });
+    $('phoneForm').classList.add('hidden'); $('codeForm').classList.remove('hidden'); $('code').focus();
+    $('devHint').textContent = r.devMode ? 'Dev mode: the code is printed in the server terminal.' : '';
+  } catch (err) { $('loginErr').textContent = err.message; }
+};
+
+$('codeForm').onsubmit = async (e) => {
+  e.preventDefault(); $('loginErr').textContent = '';
+  try {
+    me = (await api('/api/auth/verify', { body: { phone, code: $('code').value, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } })).user;
+    showApp();
+  } catch (err) { $('loginErr').textContent = err.message; }
+};
+
+$('addForm').onsubmit = async (e) => {
+  e.preventDefault(); $('addErr').textContent = '';
+  try {
+    await api('/api/assignments', { body: { title: $('title').value, course: $('course').value, dueAt: new Date($('due').value).toISOString() } });
+    $('title').value = ''; $('due').value = '';
+    loadList();
+  } catch (err) { $('addErr').textContent = err.message; }
+};
+
+$('settingsForm').onsubmit = async (e) => {
+  e.preventDefault(); $('setErr').textContent = '';
+  try {
+    const r = await api('/api/me', { method: 'PATCH', body: { remindHours: Number($('remind').value), calendarUrl: $('cal').value,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
+    me = r.user;
+    $('setErr').style.color = 'var(--ok)';
+    $('setErr').textContent = r.imported !== undefined ? `Saved. Imported ${r.imported} assignment${r.imported === 1 ? '' : 's'}.` : 'Saved.';
+    loadList();
+  } catch (err) { $('setErr').style.color = ''; $('setErr').textContent = err.message; }
+};
+
+$('logout').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); location.reload(); };
+
+api('/api/me').then((r) => { me = r.user; showApp(); }).catch(() => $('login').classList.remove('hidden'));
+</script>
+</body>
+</html>
