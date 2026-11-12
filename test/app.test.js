@@ -401,31 +401,39 @@ test('the app can be installed: manifest, icons and service worker are served', 
   assert.match(await sw.text(), /showNotification/);
 });
 
-test('notifications: one per assignment, each at the time the person picked', async (t) => {
+test('notifications: same-day assignments come together at the time the person picked', async (t) => {
   const notify = require('../src/notify');
   const { sendDueReminders } = require('../src/reminders');
   db.exec(`DELETE FROM users`);
   db.prepare(`INSERT INTO users (id, timezone, remind_hours) VALUES (90, 'America/New_York', 3)`).run(); // "3 hours before"
   db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (90, 'https://web.push.apple.com/x', 'k', 'a')`).run();
   const add = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at) VALUES (90, ?, ?, ?)`);
-  const now = new Date('2026-11-20T23:00:00Z'); // Fri 6:00 PM ET
-  add.run('Chapter 7 Quiz', 'COP1000 MRG', '2026-11-21T01:30:00Z');    // 8:30 PM tonight: inside 3 hours
-  add.run('Research Paper Outline', 'ENC1101 MRG', '2026-11-21T01:59:00Z'); // 8:59 PM: inside 3 hours
-  add.run('Chapter 7 Project', 'COP1000 MRG', '2026-11-21T04:59:00Z'); // 11:59 PM: 6 hours away, not yet
+  add.run('Chapter 7 Quiz', 'COP1000 MRG', '2026-11-21T01:30:00Z');         // Fri 8:30 PM
+  add.run('Research Paper Outline', 'ENC1101 MRG', '2026-11-21T04:59:00Z'); // Fri 11:59 PM
+  add.run('Chapter 8 Quiz', 'COP1000 MRG', '2026-11-22T04:59:00Z');         // Sat: later
 
   const pushes = [];
   t.mock.method(notify.webpush, 'sendNotification', async (sub, payload) => { pushes.push(JSON.parse(payload)); });
-  assert.equal(await sendDueReminders(now), 2);
-  assert.deepEqual(pushes.map((p) => [p.title, p.body]), [
-    ['Due today at 8:30 PM', 'Chapter 7 Quiz (Coding)'],
-    ['Due today at 8:59 PM', 'Research Paper Outline (English)'],
-  ]);
-  assert.ok(pushes.every((p) => p.tag));
+  assert.equal(await sendDueReminders(new Date('2026-11-20T22:00:00Z')), 0); // 5 PM: nothing within 3 hours yet
+  assert.equal(await sendDueReminders(new Date('2026-11-20T22:31:00Z')), 1); // 5:31 PM: the quiz is 3 hours out
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].title, '2 assignments due today');
+  assert.equal(pushes[0].body, 'Coding: Chapter 7 Quiz (8:30 PM)\nEnglish: Research Paper Outline (11:59 PM)');
+  assert.equal(await sendDueReminders(new Date('2026-11-21T02:00:00Z')), 0); // already covered, never twice
+});
 
-  // the project gets its own notification 3 hours before it's due, not earlier
-  pushes.length = 0;
-  assert.equal(await sendDueReminders(new Date('2026-11-21T01:00:00Z')), 0); // 8 PM
-  assert.equal(await sendDueReminders(new Date('2026-11-21T02:00:00Z')), 1); // 9 PM
-  assert.equal(pushes[0].body, 'Chapter 7 Project (Coding)');
-  assert.equal(await sendDueReminders(new Date('2026-11-21T02:05:00Z')), 0); // never twice
+test('past-due assignments drop off the list', async (t) => {
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const base = `http://localhost:${server.address().port}`;
+  db.exec(`DELETE FROM users; DELETE FROM rate_events`);
+  const signup = await fetch(base + '/api/auth/quick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const userId = db.prepare(`SELECT id FROM users`).get().id;
+  const add = db.prepare(`INSERT INTO assignments (user_id, title, due_at) VALUES (?, ?, ?)`);
+  add.run(userId, 'Due an hour ago', new Date(Date.now() - 3600e3).toISOString());
+  add.run(userId, 'Due last week', new Date(Date.now() - 7 * 864e5).toISOString());
+  add.run(userId, 'Due tonight', new Date(Date.now() + 3600e3).toISOString());
+  const { assignments } = await (await fetch(base + '/api/assignments', { headers: { cookie } })).json();
+  assert.deepEqual(assignments.map((a) => a.title), ['Due tonight']);
 });

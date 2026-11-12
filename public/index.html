@@ -247,7 +247,7 @@
       <li data-sms><div><b>Sign up with your phone number</b><span>We text you a code. No password.</span></div></li>
       <li data-push><div><b>Add StuCal to your Home Screen</b><span>On iPhone: tap Share, then "Add to Home Screen." No app store, no password.</span></div></li>
       <li><div><b>Paste your Canvas calendar link</b><span>Canvas → Calendar → Calendar Feed. Your assignments show up right away.</span></div></li>
-      <li><div><b>Get your reminders</b><span><span data-sms>Your week ahead every Sunday night, then a reminder the day before each thing is due. Reply STOP anytime.</span><span data-push>A notification for each assignment, at the time you pick: from 1 hour to 2 days before it's due.</span></span></div></li>
+      <li><div><b>Get your reminders</b><span><span data-sms>Your week ahead every Sunday night, then a reminder the day before each thing is due. Reply STOP anytime.</span><span data-push>A notification at the time you pick, from 1 hour to 2 days before things are due.</span></span></div></li>
     </ol>
   </section>
 
@@ -513,7 +513,7 @@ async function renderNotifications() {
   const sub = await currentSubscription().catch(() => null);
   if (sub) {
     box.innerHTML = `<p class="status on"><span class="dotc"></span>On for this device</p>
-      <p class="hint" style="margin:0 0 14px">You'll get a notification ${timingText(me.remindHours)} each assignment is due. Change the timing under <b>Remind me</b> below.</p>
+      <p class="hint" style="margin:0 0 14px">You'll get a notification ${timingText(me.remindHours)} your assignments are due. Change the timing under <b>Remind me</b> below.</p>
       <div class="btns"><button class="btn sm" id="nTest" type="button">Send me a test</button><button class="btn sm ghost" id="nOff" type="button">Turn off</button></div>`;
     $('nTest').onclick = sendTest;
     $('nOff').onclick = turnOff;

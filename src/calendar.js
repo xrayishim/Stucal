@@ -97,7 +97,7 @@ async function syncUser(user) {
   const text = await res.text();
   if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("That link isn't a calendar feed");
   const events = parseIcs(text, user.timezone);
-  const cutoff = Date.now() - 7 * 864e5; // skip anything older than a week
+  const cutoff = Date.now(); // past-due assignments aren't imported
   const kept = new Set();
   let count = 0;
   for (const ev of events) {

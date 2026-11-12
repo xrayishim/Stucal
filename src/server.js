@@ -72,6 +72,7 @@ function allow(rules) {
 const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 
 function validTimezone(tz) {
+  if (typeof tz !== 'string' || !tz) return false; // a missing value would otherwise pass the check below
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
 }
 
@@ -327,16 +328,9 @@ app.post('/api/push/unsubscribe', auth, (req, res) => {
 app.post('/api/push/test', auth, async (req, res) => {
   if (!allow([[`pushtest:${req.user.id}`, HOUR, 10]]).ok) return res.status(429).json({ error: 'That\'s enough tests for now. Try again later.' });
   if (!notify.hasPush(req.user)) return res.status(400).json({ error: 'Turn on notifications first.' });
-  // Shows exactly what the next real reminder will look like: one notification for one assignment.
-  const now = new Date();
-  const next = db.prepare(`SELECT * FROM assignments WHERE user_id = ? AND done = 0 AND due_at > ? ORDER BY due_at LIMIT 1`)
-    .get(req.user.id, now.toISOString());
-  let push = { title: 'Notifications are on!', body: "You'll get a reminder before each assignment is due.", url: '/' };
-  if (next) {
-    const sendAt = new Date(new Date(next.due_at).getTime() - req.user.remind_hours * 3600e3);
-    push = reminderPush([next], req.user.timezone, sendAt < now ? now : sendAt);
-  }
-  const list = [{ push }];
+  // Shows exactly what the next real reminder will look like (no Sunday list: notifications don't get one).
+  const [next] = previews(req.user).filter((p) => !/^Your week ahead/.test(p.push.title));
+  const list = [{ push: next ? next.push : { title: 'Notifications are on!', body: "You'll get a reminder before your assignments are due.", url: '/' } }];
   let delivered = 0;
   for (const p of list) delivered += (await notify.sendPush(req.user, p.push)).delivered;
   if (!delivered) return res.status(502).json({ error: "Couldn't send a notification. Try turning notifications off and on again." });
@@ -352,7 +346,7 @@ app.get('/api/assignments', auth, (req, res) => {
   const rows = db.prepare(`
     SELECT id, title, course, due_at AS dueAt, source, done, reminded_at AS remindedAt
     FROM assignments WHERE user_id = ? AND due_at > ? ORDER BY due_at
-  `).all(req.user.id, new Date(Date.now() - 3 * 864e5).toISOString());
+  `).all(req.user.id, new Date().toISOString()); // once something is past due, it drops off the list
   res.json({ assignments: rows.map((r) => ({ ...r, course: friendlyCourse(r.course) })) });
 });
 

@@ -111,20 +111,7 @@ async function sendDueReminders(now = new Date()) {
     const tz = user.timezone;
     const ready = pending.filter((a) => new Date(a.due_at).getTime() - user.remind_hours * 3600e3 <= now.getTime());
     if (!ready.length) continue;
-
-    // Notification-only: one short notification per assignment, right at the time they picked.
-    // (A bundled list gets cut off on a phone's lock screen.)
-    if (!canText(user)) {
-      for (const a of ready) {
-        markSent.run(nowIso, a.id); // mark first so a crash never double-sends
-        const result = await notifyUser(user, { push: { ...reminderPush([a], tz, now), tag: `a${a.id}` } });
-        if (result.delivered) sent++;
-        else if (result.retry) markSent.run(null, a.id); // try again next minute
-      }
-      continue;
-    }
-
-    // Texts: pull in anything else due the same day so it all arrives in one (cheaper) text.
+    // Pull in anything else due the same day so it all arrives in one message.
     const days = new Set(ready.map((a) => dayKey(new Date(a.due_at), tz)));
     const batch = pending.filter((a) => days.has(dayKey(new Date(a.due_at), tz)));
 

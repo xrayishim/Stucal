@@ -13,8 +13,9 @@ StuCal reminds students before their Canvas assignments are due, by phone notifi
 - **Plain subject names:** class codes like MAC1105 or POS2041 show as Math or Government.
 - **Add things Canvas doesn't have,** such as MyMathLab homework.
 - **Reminders at the time each person picks:** 1, 3, 12, 24 or 48 hours before something is due.
-  - **Notifications:** one short notification per assignment, so nothing gets cut off on the lock screen.
-  - **Texts:** assignments due the same day come in one text, and there's an optional Sunday night summary at 6 PM. The summary isn't sent as a notification because a long list doesn't fit.
+  - Assignments due the same day come together in one message.
+  - **Texts only:** an optional Sunday night summary at 6 PM. It isn't sent as a notification because a long list doesn't fit.
+- **Past-due assignments drop off** the list and aren't imported.
 
 ### Finding your Canvas calendar link
 
