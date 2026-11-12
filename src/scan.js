@@ -4,9 +4,12 @@
 const { zonedToUtc } = require('./calendar');
 const { friendlyCourse } = require('./subjects');
 
-// "gemini-flash-latest" follows Google's newest Flash model, which is on the free tier.
-// Set GEMINI_MODEL to pin a specific one if Google ever retires the alias.
-const MODEL = () => process.env.GEMINI_MODEL || 'gemini-flash-latest';
+// Models to try, in order. If one is overloaded, over its free limit, or retired,
+// StuCal moves on to the next. Flash-Lite goes first: it's fast, usually not busy,
+// and plenty for reading dates off a list. The "-latest" names follow Google's newest
+// versions; the numbered ones are backups. Set GEMINI_MODEL (comma-separated) to change the list.
+const DEFAULT_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+const MODELS = () => (process.env.GEMINI_MODEL ? process.env.GEMINI_MODEL.split(',').map((m) => m.trim()).filter(Boolean) : DEFAULT_MODELS);
 // Keys pasted on a phone often pick up a hidden space or line break, which breaks the request.
 const apiKey = () => String(process.env.GEMINI_API_KEY || '').replace(/\s+/g, '');
 const enabled = () => Boolean(apiKey());
@@ -48,8 +51,9 @@ class ScanError extends Error {
   constructor(message, status = 502) { super(message); this.status = status; }
 }
 
-async function askGemini(imageBase64, mimeType, context) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL())}:generateContent`;
+// Asks one model. Returns { items } on success, or { retry: 'busy' | 'limit' | 'gone' | 'unreadable' } to try the next model.
+async function askModel(model, imageBase64, mimeType, context) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   let res;
   try {
     res = await fetch(url, {
@@ -59,31 +63,45 @@ async function askGemini(imageBase64, mimeType, context) {
         contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt(context) }] }],
         generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(30000),
     });
   } catch (e) {
-    console.error(`screenshot reading: could not reach Gemini (model ${MODEL()}): ${e.name}: ${e.message}${e.cause ? ` / ${e.cause.code || ''} ${e.cause.message || ''}` : ''}`);
-    if (e.name === 'TimeoutError') throw new ScanError('The AI took too long to read that. Try again, or crop the screenshot to just the assignment list.', 504);
-    throw new ScanError("Couldn't reach the AI right now. Try again in a minute.");
+    console.error(`screenshot reading: ${model} could not be reached: ${e.name}: ${e.message}${e.cause ? ` / ${e.cause.code || ''} ${e.cause.message || ''}` : ''}`);
+    return { retry: 'busy' };
   }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    console.error(`screenshot reading: Gemini ${res.status}:`, body.error?.message || '');
-    if (res.status === 429) throw new ScanError('The AI is busy right now (free limit reached). Try again later.', 429);
-    if (res.status === 401 || res.status === 403 || /api key/i.test(body.error?.message || '')) {
+    const message = body.error?.message || '';
+    console.error(`screenshot reading: ${model} answered ${res.status}: ${message}`);
+    if (res.status === 401 || res.status === 403 || /api key/i.test(message)) {
       console.error('screenshot reading: check that GEMINI_API_KEY in your settings is correct and active');
       throw new ScanError("Screenshot reading isn't working right now. Try again later.", 503);
     }
-    throw new ScanError("The AI couldn't read that screenshot. Try again.");
+    if (res.status === 429) return { retry: 'limit' };
+    if (res.status === 404) return { retry: 'gone' }; // model retired or renamed
+    if (res.status >= 500) return { retry: 'busy' };
+    return { retry: 'unreadable' };
   }
   const text = (body.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
   try {
     const parsed = JSON.parse(text);
-    return Array.isArray(parsed.assignments) ? parsed.assignments : [];
+    return { items: Array.isArray(parsed.assignments) ? parsed.assignments : [] };
   } catch {
-    console.error('screenshot reading: Gemini returned something that is not JSON:', text.slice(0, 200));
-    throw new ScanError("The AI couldn't read that screenshot. Try again.");
+    console.error(`screenshot reading: ${model} returned something that is not JSON:`, text.slice(0, 200));
+    return { retry: 'unreadable' };
   }
+}
+
+async function askGemini(imageBase64, mimeType, context) {
+  const problems = [];
+  for (const model of MODELS()) {
+    const result = await askModel(model, imageBase64, mimeType, context);
+    if (result.items) return result.items;
+    problems.push(result.retry);
+  }
+  if (problems.every((p) => p === 'limit')) throw new ScanError("StuCal's free AI limit is used up for now. Try again later.", 429);
+  if (problems.every((p) => p === 'unreadable')) throw new ScanError("The AI couldn't read that screenshot. Try a clearer one.");
+  throw new ScanError('The AI is busy right now. Try again in a few minutes.', 503);
 }
 
 // classes: the student's own class names from Canvas, e.g. ["MAC1105 MRG", "ENC1101 MRG"]
@@ -118,4 +136,4 @@ async function scanScreenshot({ imageBase64, mimeType, timezone, classes = [], n
   return found;
 }
 
-module.exports = { scanScreenshot, enabled, ScanError, MODEL };
+module.exports = { scanScreenshot, enabled, ScanError, MODELS };

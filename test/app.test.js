@@ -482,7 +482,7 @@ test('screenshot import: AI reads it, past and duplicate items handled, nothing 
   const { found } = await r.json();
 
   // what was sent: the key in a header (not the URL), the picture, today's date and their classes
-  assert.match(sentToGemini.url, /models\/gemini-flash-latest:generateContent$/);
+  assert.match(sentToGemini.url, /models\/gemini-flash-lite-latest:generateContent$/);
   assert.equal(sentToGemini.headers['x-goog-api-key'], 'test-key');
   const parts = sentToGemini.body.contents[0].parts;
   assert.equal(parts[0].inlineData.mimeType, 'image/jpeg');
@@ -522,7 +522,7 @@ test('screenshot import: AI reads it, past and duplicate items handled, nothing 
     ? new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 }) : realFetch(url, opts)));
   const busy = await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image }) });
   assert.equal(busy.status, 429);
-  assert.match((await busy.json()).error, /free limit/);
+  assert.match((await busy.json()).error, /free AI limit/);
 
   // daily limit per person
   db.exec(`DELETE FROM rate_events`);
@@ -583,4 +583,32 @@ test('a Gemini key pasted with a hidden space or line break still works', async 
   });
   await scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' });
   assert.equal(sentKey, 'AIzaTestKey123');
+});
+
+test('screenshot import moves on to another model when one is overloaded or retired', async (t) => {
+  const { scanScreenshot } = require('../src/scan');
+  process.env.GEMINI_API_KEY = 'test-key';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  t.mock.method(console, 'error', () => {});
+  const tried = [];
+  const ok = { candidates: [{ content: { parts: [{ text: JSON.stringify({ assignments: [{ title: 'Section 4.4 HW', class: '', due_date: '2099-01-02', due_time: '' }] }) }] } }] };
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    const model = String(url).match(/models\/([^:]+):/)[1];
+    tried.push(model);
+    if (model === 'gemini-flash-lite-latest') return new Response(JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }), { status: 503 });
+    if (model === 'gemini-flash-latest') return new Response(JSON.stringify({ error: { message: 'models/x is not found' } }), { status: 404 });
+    return new Response(JSON.stringify(ok));
+  });
+  const found = await scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' });
+  assert.deepEqual(tried, ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite']);
+  assert.equal(found[0].title, 'Section 4.4 HW');
+
+  // every model busy: a friendly "try again" message
+  globalThis.fetch.mock.mockImplementation(async () => new Response('{}', { status: 503 }));
+  await assert.rejects(scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' }), /busy right now/);
+  // a bad key stops right away instead of trying every model
+  tried.length = 0;
+  globalThis.fetch.mock.mockImplementation(async (url) => { tried.push(url); return new Response(JSON.stringify({ error: { message: 'API key not valid' } }), { status: 400 }); });
+  await assert.rejects(scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' }), /isn't working right now/);
+  assert.equal(tried.length, 1);
 });
