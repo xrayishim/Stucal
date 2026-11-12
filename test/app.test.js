@@ -529,3 +529,45 @@ test('screenshot import: AI reads it, past and duplicate items handled, nothing 
   for (let i = 0; i < 20; i++) db.prepare(`INSERT INTO rate_events (key, at) VALUES (?, ?)`).run(`scan:${userId}`, Date.now());
   assert.equal((await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image }) })).status, 429);
 });
+
+test('screenshot import keeps only what is still upcoming when the screenshot is added (real MyMathLab list)', async (t) => {
+  const { scanScreenshot } = require('../src/scan');
+  process.env.GEMINI_API_KEY = 'test-key';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  // the rows from a real MyMathLab screenshot taken Thu Nov 12, 2026 at 2:56 PM (all with "see score" links)
+  const rows = [
+    ['Section 4.1 HW: Exponential Functions Part 1', '2026-11-02', '23:59'],
+    ['Section 4.1 Part 2', '2026-11-02', '23:59'],
+    ['Section 4.2 HW: Logarithmic Functions', '2026-11-05', '23:59'],
+    ['Ch 4 Quiz Review 4.1, 4,2,', '2026-11-05', '23:59'],
+    ['4.1, 4.2, Quiz 2026', '2026-11-06', '15:00'],
+    ['Section 4.3 HW: Properties of Logarithms Part 1', '2026-11-09', '23:59'],
+    ['Section 4.3 Part 2', '2026-11-12', '23:59'],
+    ['Ch 4 Review 4.1, 4,2, 4,3 2026', '2026-11-13', '23:59'],
+    ['Section 4.4 HW: Part 1 Exponential Equations', '2026-11-13', '23:59'],
+    ['Ch 1-4 Review 2026', '2026-11-19', '23:59'],
+  ];
+  let prompt;
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    prompt = JSON.parse(opts.body).contents[0].parts[1].text;
+    const assignments = rows.map(([title, due_date, due_time]) => ({ title, class: 'Math (MAC1105 MRG)', due_date, due_time }));
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ assignments }) }] } }] }));
+  });
+  const found = await scanScreenshot({
+    imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York',
+    classes: ['MAC1105 MRG'], now: new Date('2026-11-12T19:56:00Z'), // 2:56 PM Eastern
+  });
+  assert.deepEqual(found.map((f) => f.title), [
+    'Section 4.3 Part 2', 'Ch 4 Review 4.1, 4,2, 4,3 2026', 'Section 4.4 HW: Part 1 Exponential Equations', 'Ch 1-4 Review 2026',
+  ]);
+  assert.ok(found.every((f) => f.course === 'MAC1105 MRG'));
+  // the AI is told not to drop rows for having a score, and that today is Nov 12
+  assert.match(prompt, /including ones that are already past due and ones with a score or "see score" link/);
+  assert.match(prompt, /Today is Thursday, 2026-11-12/);
+  assert.doesNotMatch(prompt, /Skip anything that is clearly finished/);
+
+  // at 11:59 PM tonight 4.3 Part 2 is due; a minute later it's past due and no longer added
+  const later = await scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York',
+    classes: ['MAC1105 MRG'], now: new Date('2026-11-13T05:00:00Z') });
+  assert.equal(later[0].title, 'Ch 4 Review 4.1, 4,2, 4,3 2026');
+});

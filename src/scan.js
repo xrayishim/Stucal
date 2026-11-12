@@ -32,10 +32,9 @@ const SCHEMA = {
 function prompt({ today, weekday, classes }) {
   return [
     'This is a screenshot a student took of their assignment list (for example MyMathLab, McGraw Hill Connect, WebAssign or a syllabus).',
-    'List every assignment, quiz, test or project that has a due date.',
-    `Today is ${weekday}, ${today}. If a date has no year, use the next time that date comes around. "Today" and "tomorrow" are relative to today.`,
-    'Skip anything that is clearly finished already (for example it shows a score, "Submitted" or "Completed"), and skip anything with no due date.',
-    'Use the due date, not an open or start date.',
+    'List every assignment, quiz, test or project that has a due date, including ones that are already past due and ones with a score or "see score" link. StuCal decides what to keep based on the date, so do not leave anything out because of its date or score.',
+    `Today is ${weekday}, ${today}. If a date is written without a year, assume the current school year: use the year that puts it closest to today. "Today" and "tomorrow" are relative to today.`,
+    'Skip only rows with no due date at all. Use the due date, not an open or start date.',
     classes.length
       ? `The student's classes are: ${classes.map((c) => `"${c.label}"`).join(', ')}. If the screenshot clearly belongs to one of them, use that exact text for class. Otherwise use the class name shown in the screenshot, or "" if none is shown.`
       : 'For class, use the class name shown in the screenshot, or "" if none is shown.',
