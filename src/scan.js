@@ -7,7 +7,9 @@ const { friendlyCourse } = require('./subjects');
 // "gemini-flash-latest" follows Google's newest Flash model, which is on the free tier.
 // Set GEMINI_MODEL to pin a specific one if Google ever retires the alias.
 const MODEL = () => process.env.GEMINI_MODEL || 'gemini-flash-latest';
-const enabled = () => Boolean(process.env.GEMINI_API_KEY);
+// Keys pasted on a phone often pick up a hidden space or line break, which breaks the request.
+const apiKey = () => String(process.env.GEMINI_API_KEY || '').replace(/\s+/g, '');
+const enabled = () => Boolean(apiKey());
 
 const SCHEMA = {
   type: 'object',
@@ -52,15 +54,16 @@ async function askGemini(imageBase64, mimeType, context) {
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey() },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: imageBase64 } }, { text: prompt(context) }] }],
         generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: SCHEMA },
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(60000),
     });
   } catch (e) {
-    console.error('screenshot reading: could not reach Gemini:', e.cause?.code || e.message);
+    console.error(`screenshot reading: could not reach Gemini (model ${MODEL()}): ${e.name}: ${e.message}${e.cause ? ` / ${e.cause.code || ''} ${e.cause.message || ''}` : ''}`);
+    if (e.name === 'TimeoutError') throw new ScanError('The AI took too long to read that. Try again, or crop the screenshot to just the assignment list.', 504);
     throw new ScanError("Couldn't reach the AI right now. Try again in a minute.");
   }
   const body = await res.json().catch(() => ({}));

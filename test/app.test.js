@@ -571,3 +571,16 @@ test('screenshot import keeps only what is still upcoming when the screenshot is
     classes: ['MAC1105 MRG'], now: new Date('2026-11-13T05:00:00Z') });
   assert.equal(later[0].title, 'Ch 4 Review 4.1, 4,2, 4,3 2026');
 });
+
+test('a Gemini key pasted with a hidden space or line break still works', async (t) => {
+  const { scanScreenshot } = require('../src/scan');
+  process.env.GEMINI_API_KEY = '  AIzaTestKey123\n';
+  t.after(() => { delete process.env.GEMINI_API_KEY; });
+  let sentKey;
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    sentKey = opts.headers['x-goog-api-key'];
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"assignments":[]}' }] } }] }));
+  });
+  await scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' });
+  assert.equal(sentKey, 'AIzaTestKey123');
+});
