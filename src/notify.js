@@ -24,7 +24,7 @@ const keys = loadKeys();
 // Apple rejects notifications unless this is a real https address or a mailto: link.
 const appUrl = process.env.APP_URL || '';
 const subject = process.env.CONTACT_EMAIL ? `mailto:${process.env.CONTACT_EMAIL}`
-  : appUrl.startsWith('https://') ? appUrl : 'mailto:hello@stucal.app';
+  : appUrl.startsWith('https://') ? appUrl : 'https://stucal.site';
 webpush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
 
 const subsFor = db.prepare(`SELECT * FROM push_subscriptions WHERE user_id = ?`);
