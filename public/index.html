@@ -5,7 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0b1020">
 <title>StuCal – Your deadlines. Handled.</title>
-<meta name="description" content="Connect your school and get assignment reminders straight to your texts. Free.">
+<meta name="description" content="Connect your school and get a reminder before every assignment is due. Free.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="StuCal">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -136,6 +143,15 @@
   .card.test .thread { padding-bottom: 0; }
   .card.test .bubble { max-width: 100%; white-space: pre-wrap; }
   .card.test .when { font-size: 12px; color: var(--muted); margin: 0 0 -6px 4px; }
+  body.mode-push [data-sms], body:not(.mode-push) [data-push] { display: none !important; }
+  .howto { list-style: none; counter-reset: h; padding: 0; margin: 16px 0 0; display: grid; gap: 12px; }
+  .howto li { counter-increment: h; display: flex; gap: 12px; align-items: flex-start; }
+  .howto li::before { content: counter(h); flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+  .howto svg { width: 18px; height: 18px; vertical-align: -3px; color: var(--blue-hi); }
+  .status { display: flex; align-items: center; gap: 10px; font-weight: 600; margin: 0 0 12px; }
+  .status .dotc { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status.on .dotc { background: var(--ok); box-shadow: 0 0 0 4px rgba(94,227,161,.15); }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
   ul.list li:first-child { border-top: 0; padding-top: 4px; }
@@ -155,6 +171,8 @@
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/><path d="M22 8c0-2.3-.8-4.3-2-6"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></symbol>
   <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></symbol>
 </svg>
 
@@ -173,14 +191,14 @@
   <section class="hero wrap">
     <span class="badge">Your school assistant</span>
     <h1>Your deadlines. <span class="hl">Handled.</span></h1>
-    <p class="lead">Connect your school. Get assignment reminders straight to your texts. <em>Soon: ask StuCal what's due, anytime.</em></p>
+    <p class="lead">Connect your school. Get assignment reminders <span data-sms>straight to your texts</span><span data-push>right on your phone</span>. <em>Soon: ask StuCal what's due, anytime.</em></p>
     <button class="btn" data-go="login">Get started for free</button>
     <p class="fine">Free. No credit card required.</p>
 
     <div class="mock" aria-label="Example text conversation with StuCal">
       <div class="mock-head">
         <div class="avatar"><svg class="i"><use href="#i-cap"/></svg></div>
-        <div><b>StuCal</b><small>Text Message · Example</small></div>
+        <div><b>StuCal</b><small><span data-sms>Text Message</span><span data-push>Reminder</span> · Example</small></div>
       </div>
       <div class="thread">
         <div class="bubble in">
@@ -207,7 +225,7 @@
       <div class="feature">
         <svg class="i"><use href="#i-bell"/></svg>
         <h3>Never miss a deadline</h3>
-        <p>Get a text the day before each assignment is due.</p>
+        <p>Get a reminder the day before each assignment is due.</p>
       </div>
       <div class="feature">
         <svg class="i"><use href="#i-chat"/></svg>
@@ -217,7 +235,7 @@
       <div class="feature">
         <svg class="i"><use href="#i-cal"/></svg>
         <h3>Your week, simplified</h3>
-        <p>Every Sunday night, get one text with everything due that week.</p>
+        <p>Every Sunday night, see everything due that week in one message.</p>
       </div>
     </div>
   </section>
@@ -226,9 +244,10 @@
     <h2 class="section">Three steps</h2>
     <p class="section-sub">No app to download.</p>
     <ol class="steps">
-      <li><div><b>Sign up with your phone number</b><span>We text you a code. No password.</span></div></li>
+      <li data-sms><div><b>Sign up with your phone number</b><span>We text you a code. No password.</span></div></li>
+      <li data-push><div><b>Add StuCal to your Home Screen</b><span>On iPhone: tap Share, then "Add to Home Screen." No app store, no password.</span></div></li>
       <li><div><b>Paste your Canvas calendar link</b><span>Canvas → Calendar → Calendar Feed. Your assignments show up right away.</span></div></li>
-      <li><div><b>Get your texts</b><span>Your week ahead every Sunday night, then a reminder the day before each thing is due. Reply STOP anytime.</span></div></li>
+      <li><div><b>Get your reminders</b><span>Your week ahead every Sunday night, then a reminder the day before each thing is due.<span data-sms> Reply STOP anytime.</span></span></div></li>
     </ol>
   </section>
 
@@ -248,6 +267,24 @@
   <button class="back" data-go="home">← Back</button>
   <div class="card">
     <h2 class="big">Get started</h2>
+
+    <div id="installBox" class="hidden">
+      <p class="hint" style="margin:0">iPhones only show reminders from apps on your Home Screen, so add StuCal there first. It takes 10 seconds.</p>
+      <ol class="howto">
+        <li><div>Tap the <b>Share</b> button <svg class="i"><use href="#i-share"/></svg> at the bottom of Safari.</div></li>
+        <li><div>Scroll down and tap <b>Add to Home Screen</b> <svg class="i"><use href="#i-plus"/></svg>, then <b>Add</b>.</div></li>
+        <li><div>Open <b>StuCal</b> from your Home Screen to finish setting up.</div></li>
+      </ol>
+      <p class="hint mt">Needs iOS 16.4 or newer. Using Chrome on iPhone? Open this page in Safari instead.</p>
+    </div>
+
+    <div id="quickBox" class="hidden">
+      <p class="hint" style="margin:0 0 4px">No phone number or password needed. StuCal remembers you on this device.</p>
+      <button class="btn block mt" id="quickBtn" type="button">Create my StuCal</button>
+      <p class="consent">By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
+    </div>
+
+    <div id="smsBox">
     <p class="hint" style="margin-bottom:6px">New or returning, just enter your number.</p>
     <form id="phoneForm">
       <label for="phone">Phone number</label>
@@ -261,12 +298,19 @@
       <button class="btn block mt">Continue</button>
       <p class="hint" id="devHint"></p>
     </form>
+    </div>
     <div class="err" id="loginErr"></div>
   </div>
 </main>
 
 <!-- ================= DASHBOARD ================= -->
 <main id="app" class="page hidden">
+  <div class="card" id="notifyCard">
+    <h2>Notifications</h2>
+    <div id="nState"></div>
+    <div class="err" id="nErr"></div>
+  </div>
+
   <div class="card test hidden" id="testCard">
     <h2>Test mode</h2>
     <p class="hint" style="margin:0 0 14px">Real texts aren't turned on yet. These are the texts StuCal would send you. New ones show up here automatically.</p>
@@ -288,7 +332,7 @@
         <b>Google Classroom:</b> open the class calendar in Google Calendar → Settings → "Secret address in iCal format".<br>
         <b>Moodle:</b> Calendar → "Export calendar" → "Get calendar URL".</p>
       </details>
-      <label for="remind" class="mt">Text me</label>
+      <label for="remind" class="mt">Remind me</label>
       <select id="remind">
         <option value="1">1 hour before</option>
         <option value="3">3 hours before</option>
@@ -324,7 +368,8 @@
 
   <div class="card">
     <h2>Your account</h2>
-    <p class="hint" style="margin:0 0 14px">Deleting your account erases your phone number, settings and assignments right away. It can't be undone.</p>
+    <p class="hint" style="margin:0 0 10px" id="deviceNote">StuCal remembers you on this device. If you delete the Home Screen app or clear your browser data, you'll need to set it up again (it only takes a minute).</p>
+    <p class="hint" style="margin:0 0 14px">Deleting your account erases your settings and assignments right away. It can't be undone.</p>
     <button class="btn danger" id="deleteBtn">Delete my account</button>
   </div>
   <p class="hint" style="text-align:center"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
@@ -334,6 +379,14 @@
 const $ = (id) => document.getElementById(id);
 let phone = '';
 let me = null;
+let config = { sms: false, pushKey: null };
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const pushMode = () => !config.sms; // without texting set up, StuCal runs on notifications
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { method: opts.body ? 'POST' : 'GET', ...opts, headers: { 'Content-Type': 'application/json' },
@@ -348,11 +401,12 @@ function show(view) {
   for (const v of ['home', 'login', 'app']) $(v).classList.toggle('hidden', v !== view);
   $('howLink').classList.toggle('hidden', view !== 'home');
   const nav = $('navBtn');
-  if (view === 'app') { nav.textContent = 'Log out'; nav.className = 'btn sm ghost'; nav.dataset.go = 'logout'; }
+  // Accounts without a phone number have no way to log back in, so they don't get a Log out button.
+  if (view === 'app') { nav.textContent = 'Log out'; nav.className = 'btn sm ghost' + (me && !me.hasPhone ? ' hidden' : ''); nav.dataset.go = 'logout'; }
   else if (me) { nav.textContent = 'My assignments'; nav.className = 'btn sm'; nav.dataset.go = 'app'; }
   else { nav.textContent = 'Log in'; nav.className = 'btn sm'; nav.dataset.go = 'login'; }
   if (view === 'app') showApp();
-  if (view === 'login') setTimeout(() => $('phone').focus(), 50);
+  if (view === 'login') showLogin();
   window.scrollTo(0, 0);
 }
 
@@ -386,7 +440,7 @@ async function loadList() {
     li.innerHTML = `<input type="checkbox" ${a.done ? 'checked' : ''} aria-label="Mark done">
       <div class="t"><b></b><span></span></div><button class="x" aria-label="Delete">✕</button>`;
     li.querySelector('b').textContent = a.title;
-    li.querySelector('span').textContent = [a.course, fmtDue(a.dueAt), a.remindedAt ? 'texted ✓' : ''].filter(Boolean).join(' · ');
+    li.querySelector('span').textContent = [a.course, fmtDue(a.dueAt), a.remindedAt ? 'reminded ✓' : ''].filter(Boolean).join(' · ');
     li.querySelector('input').onchange = async (e) => { await api(`/api/assignments/${a.id}`, { method: 'PATCH', body: { done: e.target.checked } }); loadList(); };
     li.querySelector('.x').onclick = async () => { await api(`/api/assignments/${a.id}`, { method: 'DELETE' }); loadList(); };
     $('list').append(li);
@@ -399,8 +453,105 @@ function showApp() {
   $('cal').value = me.calendarUrl || '';
   $('weekly').checked = me.weeklySummary;
   loadList();
-  $('testCard').classList.toggle('hidden', !me.testMode);
-  if (me.testMode) loadOutbox();
+  $('testCard').classList.toggle('hidden', !(me.testMode && me.hasPhone));
+  if (me.testMode && me.hasPhone) loadOutbox();
+  $('deviceNote').classList.toggle('hidden', me.hasPhone);
+  renderNotifications();
+}
+
+// ---------- sign up ----------
+function showLogin() {
+  const push = pushMode();
+  $('smsBox').classList.toggle('hidden', push);
+  $('installBox').classList.toggle('hidden', !(push && isIOS && !standalone));
+  $('quickBox').classList.toggle('hidden', !(push && !(isIOS && !standalone)));
+  if (!push) setTimeout(() => $('phone').focus(), 50);
+}
+
+$('quickBtn').onclick = async () => {
+  $('loginErr').textContent = '';
+  try {
+    me = (await api('/api/auth/quick', { body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } })).user;
+    show('app');
+  } catch (err) { $('loginErr').textContent = err.message; }
+};
+
+// ---------- notifications ----------
+function keyBytes(base64) {
+  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function currentSubscription() {
+  if (!pushSupported) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+
+async function renderNotifications() {
+  const box = $('nState');
+  $('nErr').textContent = '';
+  if (isIOS && !standalone) {
+    box.innerHTML = `<p class="status"><span class="dotc"></span>Off on this device</p>
+      <p class="hint" style="margin:0">To get reminders on your iPhone, add StuCal to your Home Screen: tap <b>Share</b> <svg class="i" style="width:16px;height:16px;vertical-align:-3px"><use href="#i-share"/></svg>, then <b>Add to Home Screen</b>. Then open it from there and turn notifications on.</p>`;
+    return;
+  }
+  if (!pushSupported) {
+    box.innerHTML = `<p class="hint" style="margin:0">This browser can't show notifications. Try Chrome, or Safari on iPhone.</p>`;
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    box.innerHTML = `<p class="status"><span class="dotc"></span>Blocked</p>
+      <p class="hint" style="margin:0">Notifications are turned off for StuCal. ${isIOS ? 'Open <b>Settings → Notifications → StuCal</b> and turn on <b>Allow Notifications</b>.' : "Allow them in your browser's site settings, then reload this page."}</p>`;
+    return;
+  }
+  const sub = await currentSubscription().catch(() => null);
+  if (sub) {
+    box.innerHTML = `<p class="status on"><span class="dotc"></span>On for this device</p>
+      <p class="hint" style="margin:0 0 14px">You'll get a reminder ${me.remindHours === 24 ? 'the day before' : 'before'} each assignment is due${me.weeklySummary ? ', and your week ahead every Sunday at 6 PM' : ''}.</p>
+      <div class="btns"><button class="btn sm" id="nTest" type="button">Send me a test</button><button class="btn sm ghost" id="nOff" type="button">Turn off</button></div>`;
+    $('nTest').onclick = sendTest;
+    $('nOff').onclick = turnOff;
+  } else {
+    box.innerHTML = `<p class="status"><span class="dotc"></span>Off</p>
+      <p class="hint" style="margin:0 0 14px">Turn on notifications so StuCal can remind you before things are due.</p>
+      <button class="btn" id="nOn" type="button">Turn on notifications</button>`;
+    $('nOn').onclick = turnOn;
+  }
+}
+
+async function turnOn() {
+  $('nErr').textContent = '';
+  try {
+    // Ask right away: iPhones only show the prompt directly after a tap.
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return renderNotifications();
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) ||
+      (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(config.pushKey) }));
+    me = (await api('/api/push/subscribe', { body: { subscription: sub.toJSON() } })).user;
+    await renderNotifications();
+    await sendTest();
+  } catch (err) { $('nErr').textContent = err.message || "Couldn't turn on notifications."; }
+}
+
+async function sendTest() {
+  $('nErr').textContent = '';
+  try {
+    await api('/api/push/test', { method: 'POST' });
+    $('nErr').style.color = 'var(--ok)';
+    $('nErr').textContent = 'Sent! It should pop up in a few seconds.';
+  } catch (err) { $('nErr').style.color = ''; $('nErr').textContent = err.message; }
+}
+
+async function turnOff() {
+  const sub = await currentSubscription().catch(() => null);
+  if (sub) {
+    await api('/api/push/unsubscribe', { body: { endpoint: sub.endpoint } }).catch(() => {});
+    await sub.unsubscribe().catch(() => {});
+  }
+  renderNotifications();
 }
 
 $('phoneForm').onsubmit = async (e) => {
@@ -464,7 +615,17 @@ $('deleteBtn').onclick = async () => {
   catch (err) { alert(err.message); }
 };
 
-api('/api/me').then((r) => { me = r.user; show('app'); }).catch(() => show('home'));
+(async () => {
+  config = await api('/api/config').catch(() => config);
+  document.body.classList.toggle('mode-push', pushMode());
+  try {
+    me = (await api('/api/me')).user;
+    show('app');
+  } catch {
+    // Opened from the Home Screen for the first time: go straight to setup.
+    show(standalone ? 'login' : 'home');
+  }
+})();
 </script>
 </body>
 </html>

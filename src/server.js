@@ -5,7 +5,8 @@ const db = require('./db');
 const sms = require('./sms');
 const calendar = require('./calendar');
 const { friendlyCourse } = require('./subjects');
-const { sendDueReminders, sendWeeklySummaries, reminderText, summaryText } = require('./reminders');
+const { sendDueReminders, sendWeeklySummaries, reminderText, summaryText, reminderPush, summaryPush, weekFor } = require('./reminders');
+const notify = require('./notify');
 
 const fs = require('node:fs');
 
@@ -84,12 +85,17 @@ function auth(req, res, next) {
   const user = token && db.prepare(`SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`).get(token);
   if (!user) return res.status(401).json({ error: 'Not logged in' });
   req.user = user;
+  res.setHeader('Set-Cookie', sessionCookie(token)); // keep active people logged in
   next();
 }
+
+const countSubs = db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?`);
 
 function publicUser(u) {
   return {
     phone: u.phone,
+    hasPhone: Boolean(u.phone),
+    notificationDevices: countSubs.get(u.id).n,
     timezone: u.timezone,
     remindHours: u.remind_hours,
     calendarUrl: u.calendar_url,
@@ -154,11 +160,36 @@ app.post('/api/auth/verify', (req, res) => {
     // They just got a login code, so texts are getting through again.
     db.prepare(`UPDATE users SET opted_out = 0 WHERE id = ?`).run(user.id);
   }
-  const token = crypto.randomBytes(32).toString('hex');
-  db.prepare(`INSERT INTO sessions (token, user_id) VALUES (?, ?)`).run(token, user.id);
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `stucal_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${60 * 60 * 24 * 90}${secure}`);
+  startSession(res, user.id);
   res.json({ user: publicUser(user) });
+});
+
+// Browsers keep cookies at most 400 days; StuCal refreshes it on every visit (see auth()).
+const SESSION_DAYS = 400;
+function sessionCookie(token) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `stucal_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}${secure}`;
+}
+function startSession(res, userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  db.prepare(`INSERT INTO sessions (token, user_id) VALUES (?, ?)`).run(token, userId);
+  res.setHeader('Set-Cookie', sessionCookie(token));
+}
+
+// ---------- quick start: notification-only account, no phone number ----------
+app.post('/api/auth/quick', (req, res) => {
+  const limit = allow([[`quick:${req.ip}`, HOUR, 10], [`quick:${req.ip}`, DAY, 30], ['quick-all', HOUR, 500]]);
+  if (!limit.ok) return res.status(429).json({ error: 'Too many sign-ups from here. Try again in a while.' });
+  const tz = validTimezone(req.body.timezone) ? req.body.timezone : 'America/New_York';
+  const r = db.prepare(`INSERT INTO users (timezone) VALUES (?)`).run(tz);
+  const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(Number(r.lastInsertRowid));
+  startSession(res, user.id);
+  res.json({ user: publicUser(user) });
+});
+
+// What this StuCal can do, so the page shows the right sign-up.
+app.get('/api/config', (req, res) => {
+  res.json({ sms: sms.live, testMode: TEST_MODE, pushKey: notify.publicKey });
 });
 
 app.post('/api/auth/logout', auth, (req, res) => {
@@ -246,24 +277,64 @@ app.get('/api/test/outbox', auth, (req, res) => {
   res.json({ texts: sms.outbox.filter((m) => m.to === req.user.phone).slice(-30).reverse() });
 });
 
-// Shows what the next day-before reminder and the Sunday summary would say, without marking anything as sent.
-app.post('/api/test/preview', auth, async (req, res) => {
-  if (!TEST_MODE) return res.sendStatus(404);
-  const tz = req.user.timezone;
+// What the next day-before reminder and the Sunday summary would say. Nothing is marked as sent.
+function previews(user) {
+  const tz = user.timezone;
   const now = new Date();
   const upcoming = db.prepare(`SELECT * FROM assignments WHERE user_id = ? AND done = 0 AND due_at > ? ORDER BY due_at`)
-    .all(req.user.id, now.toISOString());
+    .all(user.id, now.toISOString());
+  const out = [];
   const dayOf = (a) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(a.due_at));
   if (upcoming.length) {
-    const firstDay = dayOf(upcoming[0]);
-    const batch = upcoming.filter((a) => dayOf(a) === firstDay);
+    const batch = upcoming.filter((a) => dayOf(a) === dayOf(upcoming[0]));
     // pretend it's the day before, at the user's chosen reminder time
-    const at = new Date(new Date(batch[0].due_at).getTime() - req.user.remind_hours * 3600e3);
-    await sms.sendSms(req.user.phone, reminderText(batch, tz, at < now ? now : at));
+    const sendAt = new Date(new Date(batch[0].due_at).getTime() - user.remind_hours * 3600e3);
+    const at = sendAt < now ? now : sendAt;
+    out.push({ text: reminderText(batch, tz, at), push: reminderPush(batch, tz, at) });
   }
-  const week = upcoming.filter((a) => new Date(a.due_at) - now <= 7 * DAY);
-  await sms.sendSms(req.user.phone, summaryText(week, tz));
+  const week = weekFor(user.id, now);
+  out.push({ text: summaryText(week, tz), push: summaryPush(week, tz) });
+  return out;
+}
+
+app.post('/api/test/preview', auth, async (req, res) => {
+  if (!TEST_MODE) return res.sendStatus(404);
+  for (const p of previews(req.user)) await sms.sendSms(req.user.phone, p.text);
   res.json({ ok: true });
+});
+
+// ---------- notifications ----------
+app.post('/api/push/subscribe', auth, (req, res) => {
+  const sub = req.body.subscription || {};
+  const endpoint = String(sub.endpoint || '');
+  const { p256dh, auth: authKey } = sub.keys || {};
+  if (!/^https:\/\//.test(endpoint) || endpoint.length > 2000 || !p256dh || !authKey) {
+    return res.status(400).json({ error: "That notification setup didn't work. Try again." });
+  }
+  db.prepare(`
+    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
+    ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth
+  `).run(req.user.id, endpoint, String(p256dh), String(authKey));
+  res.json({ user: publicUser(req.user) });
+});
+
+app.post('/api/push/unsubscribe', auth, (req, res) => {
+  db.prepare(`DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?`).run(req.user.id, String(req.body.endpoint || ''));
+  res.json({ user: publicUser(req.user) });
+});
+
+// Sends this person's next reminder and Sunday summary as notifications right now, so they can see it works.
+app.post('/api/push/test', auth, async (req, res) => {
+  if (!allow([[`pushtest:${req.user.id}`, HOUR, 10]]).ok) return res.status(429).json({ error: 'That\'s enough tests for now. Try again later.' });
+  if (!notify.hasPush(req.user)) return res.status(400).json({ error: 'Turn on notifications first.' });
+  const list = previews(req.user);
+  if (list.length === 1 && /Nothing due/.test(list[0].push.body)) {
+    list.unshift({ push: { title: "Notifications are on!", body: "You'll get a reminder the day before things are due.", url: '/' } });
+  }
+  let delivered = 0;
+  for (const p of list) delivered += (await notify.sendPush(req.user, p.push)).delivered;
+  if (!delivered) return res.status(502).json({ error: "Couldn't send a notification. Try turning notifications off and on again." });
+  res.json({ ok: true, sent: list.length });
 });
 
 app.post('/api/calendar/sync', auth, async (req, res) => {

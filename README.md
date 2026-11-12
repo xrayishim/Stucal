@@ -1,17 +1,18 @@
 # StuCal
 
-StuCal texts students before their Canvas assignments are due. It's free.
+StuCal reminds students before their Canvas assignments are due, by phone notification or text. It's free.
 
 > StuCal: Lab Report 3 (CHEM-101-02) is due tomorrow at 11:59 PM. Reply STOP to opt out.
 
 ## What it does
 
-- **Login by text.** Students enter a phone number and type in the code they get. There are no passwords.
-- **Connect Canvas once.** Students paste their Canvas calendar link, and StuCal imports every assignment and re-checks it every hour. If a teacher moves a deadline, the reminder moves with it. Calendar links from Blackboard, Moodle and Google Classroom work too.
-- **Add things Canvas doesn't have,** such as MyMathLab homework when the teacher doesn't sync it.
-- **Sunday night summary:** at 6 PM local time every Sunday, one text lists everything due in the coming week, grouped by day. Students can turn it off.
-- **Day-before reminder:** by default, a text 1 day before each assignment is due (students can pick 1, 3, 12, 24 or 48 hours). Assignments due the same day come in one text.
-- **Each assignment gets exactly one reminder,** and assignments checked off get none.
+- **Two ways to get reminders:**
+  - **Notifications (works now, no approval needed).** Students add StuCal to their Home Screen and turn on notifications. No phone number or password is needed: StuCal remembers them on that device. Works on iPhone (iOS 16.4+, from the Home Screen), Android and desktop browsers.
+  - **Texts (once Twilio is set up and approved).** Students sign up with their phone number and log in with a texted code. If Twilio keys are set, the sign-up page switches to this automatically.
+- **Connect Canvas once.** Students paste their Canvas calendar link. StuCal imports every assignment (skipping school-wide events like breaks), re-checks hourly, follows moved deadlines and drops deleted assignments. Blackboard, Moodle and Google Classroom calendar links work too.
+- **Plain subject names:** class codes like MAC1105 or POS2041 show as Math or Government.
+- **Add things Canvas doesn't have,** such as MyMathLab homework.
+- **Sunday night summary** at 6 PM local time (can be turned off), and a **day-before reminder** (or 1, 3, 12 or 48 hours). Assignments due the same day arrive together.
 
 ### Finding your Canvas calendar link
 
@@ -28,6 +29,16 @@ npm test
 You need Node 22.13 or newer. Without Twilio keys, every text, including the login code, is printed in the terminal.
 
 ## Going live
+
+### Notifications only (no waiting)
+
+1. Host it somewhere always-on with a **persistent disk** (e.g. Render Starter plus a 1 GB disk at `/var/data`). This matters more than usual: the database holds everyone's accounts *and* the notification signing keys, and if those are lost, everyone has to set StuCal up again.
+2. Set `NODE_ENV=production`, `DB_PATH=/var/data/stucal.db`, `APP_URL` (your https address) and `CONTACT_EMAIL`.
+3. Share the link. On iPhone, friends open it in Safari, tap Share, then Add to Home Screen, then open StuCal from the Home Screen and follow the steps.
+
+Optional: set `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (make them with `npx web-push generate-vapid-keys`) to fix the notification keys yourself instead of storing them in the database.
+
+### Adding texts
 
 1. **Twilio** (sending texts): buy a phone number and fill in the `TWILIO_*` values in `.env.example`.
    - In the Twilio console, set the number's **"A message comes in"** webhook to `https://YOUR-DOMAIN/api/sms/incoming` (HTTP POST). That's how StuCal learns when someone texts STOP or START.

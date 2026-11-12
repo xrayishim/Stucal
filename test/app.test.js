@@ -305,3 +305,96 @@ test('class codes become subject names people recognize', () => {
   };
   for (const [input, want] of Object.entries(cases)) assert.equal(friendlyCourse(input), want, input);
 });
+
+test('notification accounts: quick signup, reminders by notification, dead devices cleaned up', async (t) => {
+  const notify = require('../src/notify');
+  const { sendDueReminders, sendWeeklySummaries } = require('../src/reminders');
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const base = `http://localhost:${server.address().port}`;
+  const json = { 'Content-Type': 'application/json' };
+  db.exec(`DELETE FROM users; DELETE FROM rate_events`);
+
+  const config = await (await fetch(base + '/api/config')).json();
+  assert.equal(config.sms, false);
+  assert.ok(config.pushKey.length > 60);
+
+  // one tap, no phone number
+  const signup = await fetch(base + '/api/auth/quick', { method: 'POST', headers: json, body: JSON.stringify({ timezone: 'America/New_York' }) });
+  assert.equal(signup.status, 200);
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  assert.match(signup.headers.get('set-cookie'), /Max-Age=34560000/); // 400 days
+  const user = (await signup.json()).user;
+  assert.equal(user.hasPhone, false);
+  assert.equal(user.notificationDevices, 0);
+  const userId = db.prepare(`SELECT id FROM users`).get().id;
+
+  // an assignment due soon, but notifications aren't on yet: nothing is "sent" or used up
+  db.prepare(`INSERT INTO assignments (user_id, title, course, due_at) VALUES (?, 'Research Paper Outline', 'ENC1101 MRG', ?)`)
+    .run(userId, new Date(Date.now() + 5 * 3600e3).toISOString());
+  const pushes = [];
+  const send = t.mock.method(notify.webpush, 'sendNotification', async (sub, payload) => { pushes.push({ sub, payload: JSON.parse(payload) }); return { statusCode: 201 }; });
+  assert.equal(await sendDueReminders(), 0);
+  assert.equal(db.prepare(`SELECT reminded_at FROM assignments`).get().reminded_at, null);
+  assert.equal((await fetch(base + '/api/push/test', { method: 'POST', headers: { cookie } })).status, 400);
+
+  // turn on notifications on two devices
+  const sub = (n) => ({ endpoint: `https://web.push.apple.com/device-${n}`, keys: { p256dh: 'BKey' + n, auth: 'auth' + n } });
+  assert.equal((await fetch(base + '/api/push/subscribe', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ subscription: { endpoint: 'http://evil', keys: {} } }) })).status, 400);
+  for (const n of [1, 2]) {
+    const r = await fetch(base + '/api/push/subscribe', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ subscription: sub(n) }) });
+    assert.equal(r.status, 200);
+  }
+  assert.equal((await (await fetch(base + '/api/me', { headers: { cookie } })).json()).user.notificationDevices, 2);
+
+  // the reminder goes out as a notification to both devices, with friendly names
+  assert.equal(await sendDueReminders(), 1);
+  assert.equal(pushes.length, 2);
+  assert.match(pushes[0].payload.title, /^Due (today|tomorrow) at /);
+  assert.equal(pushes[0].payload.body, 'Research Paper Outline (English)');
+  assert.ok(db.prepare(`SELECT reminded_at FROM assignments`).get().reminded_at);
+
+  // a device that removed the app (410 Gone) is forgotten; the other still works
+  pushes.length = 0;
+  send.mock.mockImplementation(async (s, payload) => {
+    if (s.endpoint.endsWith('device-1')) throw Object.assign(new Error('gone'), { statusCode: 410 });
+    pushes.push({ sub: s, payload: JSON.parse(payload) });
+  });
+  const test = await fetch(base + '/api/push/test', { method: 'POST', headers: { cookie } });
+  assert.equal(test.status, 200);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).get().n, 1);
+  assert.ok(pushes.some((p) => /Your week ahead: 1 assignment/.test(p.payload.title)));
+
+  // Sunday summary reaches notification-only accounts too
+  db.exec(`UPDATE assignments SET due_at = '2026-11-17T04:59:00Z', reminded_at = NULL`);
+  pushes.length = 0;
+  assert.equal(await sendWeeklySummaries(new Date('2026-11-15T23:30:00Z')), 1); // Sun 6:30 PM ET
+  assert.deepEqual(pushes[0].payload, { title: 'Your week ahead: 1 assignment', body: 'Mon: English: Research Paper Outline', url: '/' });
+
+  // Apple temporarily down: reminder is retried next minute rather than lost
+  db.exec(`UPDATE assignments SET due_at = '${new Date(Date.now() + 3600e3).toISOString()}', reminded_at = NULL`);
+  send.mock.mockImplementation(async () => { throw Object.assign(new Error('unavailable'), { statusCode: 503 }); });
+  t.mock.method(console, 'error', () => {});
+  assert.equal(await sendDueReminders(), 0);
+  assert.equal(db.prepare(`SELECT reminded_at FROM assignments`).get().reminded_at, null);
+
+  // deleting the account removes its devices too
+  await fetch(base + '/api/me', { method: 'DELETE', headers: { cookie } });
+  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).get().n, 0);
+});
+
+test('the app can be installed: manifest, icons and service worker are served', async (t) => {
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const base = `http://localhost:${server.address().port}`;
+  const manifest = await (await fetch(base + '/manifest.webmanifest')).json();
+  assert.equal(manifest.display, 'standalone');
+  for (const icon of [...manifest.icons.map((i) => i.src), '/icons/icon-180.png']) {
+    const r = await fetch(base + icon);
+    assert.equal(r.status, 200, icon);
+    assert.equal(r.headers.get('content-type'), 'image/png');
+  }
+  const sw = await fetch(base + '/sw.js');
+  assert.match(sw.headers.get('content-type'), /javascript/);
+  assert.match(await sw.text(), /showNotification/);
+});

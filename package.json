@@ -17,7 +17,8 @@
   },
   "homepage": "https://github.com/xrayishim/Stucal#readme",
   "dependencies": {
-    "express": "^4.22.3"
+    "express": "^4.22.3",
+    "web-push": "^3.6.7"
   },
   "engines": {
     "node": ">=22.13"
