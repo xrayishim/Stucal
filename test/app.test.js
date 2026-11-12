@@ -226,3 +226,27 @@ test('privacy and terms pages load with contact details filled in', async (t) =>
   }
   assert.match(await (await fetch(base + '/privacy')).text(), /No mobile information will be shared with third parties/);
 });
+
+test('test mode shows the login code and the texts StuCal would send', async (t) => {
+  const server = app.listen(0);
+  t.after(() => server.close());
+  const base = `http://localhost:${server.address().port}`;
+  const json = { 'Content-Type': 'application/json' };
+  t.mock.method(console, 'log', () => {});
+  db.exec(`DELETE FROM rate_events; DELETE FROM users`);
+
+  const started = await (await fetch(base + '/api/auth/start', { method: 'POST', headers: json, body: JSON.stringify({ phone: '2025550188' }) })).json();
+  assert.match(started.testCode, /^\d{6}$/);
+  const login = await fetch(base + '/api/auth/verify', { method: 'POST', headers: json, body: JSON.stringify({ phone: '2025550188', code: started.testCode, timezone: 'America/New_York' }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  assert.equal((await login.json()).user.testMode, true);
+
+  await fetch(base + '/api/assignments', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ title: 'HW 5.3', course: 'Algebra', dueAt: new Date(Date.now() + 2 * 864e5).toISOString() }) });
+  await fetch(base + '/api/test/preview', { method: 'POST', headers: { cookie } });
+  const { texts } = await (await fetch(base + '/api/test/outbox', { headers: { cookie } })).json();
+  assert.match(texts[0].body, /Your week ahead - 1 assignment/);
+  assert.match(texts[1].body, /HW 5\.3 \(Algebra\) is due tomorrow/);
+  assert.ok(texts.some((m) => /signed up for assignment reminders/.test(m.body)));
+  // preview doesn't count as the real reminder
+  assert.equal(db.prepare(`SELECT reminded_at FROM assignments WHERE title = 'HW 5.3'`).get().reminded_at, null);
+});

@@ -4,13 +4,15 @@ const path = require('node:path');
 const db = require('./db');
 const sms = require('./sms');
 const calendar = require('./calendar');
-const { sendDueReminders, sendWeeklySummaries } = require('./reminders');
+const { sendDueReminders, sendWeeklySummaries, reminderText, summaryText } = require('./reminders');
 
 const fs = require('node:fs');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 const CONTACT_EMAIL = process.env.CONTACT_EMAIL || '';
+// Test mode: no Twilio keys and not production. Login codes and texts are shown on screen instead of sent.
+const TEST_MODE = !sms.live && process.env.NODE_ENV !== 'production';
 const MAX_CODES_PER_HOUR = Number(process.env.MAX_CODES_PER_HOUR) || 300; // whole-app safety cap
 
 const app = express();
@@ -91,6 +93,7 @@ function publicUser(u) {
     remindHours: u.remind_hours,
     calendarUrl: u.calendar_url,
     weeklySummary: Boolean(u.weekly_summary),
+    testMode: TEST_MODE,
   };
 }
 
@@ -125,7 +128,7 @@ app.post('/api/auth/start', async (req, res) => {
     console.error(e.message);
     return res.status(502).json({ error: 'Could not send a text to that number. Check it and try again.' });
   }
-  res.json({ ok: true, devMode: !sms.live });
+  res.json({ ok: true, devMode: !sms.live, ...(TEST_MODE ? { testCode: code } : {}) });
 });
 
 app.post('/api/auth/verify', (req, res) => {
@@ -234,6 +237,32 @@ app.post('/api/sms/incoming', express.urlencoded({ extended: false }), (req, res
   // Anything else: we can't read replies yet. Answer at most once a day per number so nobody can run up our bill.
   const ok = from && allow([[`reply:${from}`, DAY, 1]]).ok;
   res.send(twiml(ok ? `StuCal can't read replies yet. Manage your reminders at ${APP_URL}` : ''));
+});
+
+// ---------- test mode helpers (never available with real texting) ----------
+app.get('/api/test/outbox', auth, (req, res) => {
+  if (!TEST_MODE) return res.sendStatus(404);
+  res.json({ texts: sms.outbox.filter((m) => m.to === req.user.phone).slice(-30).reverse() });
+});
+
+// Shows what the next day-before reminder and the Sunday summary would say, without marking anything as sent.
+app.post('/api/test/preview', auth, async (req, res) => {
+  if (!TEST_MODE) return res.sendStatus(404);
+  const tz = req.user.timezone;
+  const now = new Date();
+  const upcoming = db.prepare(`SELECT * FROM assignments WHERE user_id = ? AND done = 0 AND due_at > ? ORDER BY due_at`)
+    .all(req.user.id, now.toISOString());
+  const dayOf = (a) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(a.due_at));
+  if (upcoming.length) {
+    const firstDay = dayOf(upcoming[0]);
+    const batch = upcoming.filter((a) => dayOf(a) === firstDay);
+    // pretend it's the day before, at the user's chosen reminder time
+    const at = new Date(new Date(batch[0].due_at).getTime() - req.user.remind_hours * 3600e3);
+    await sms.sendSms(req.user.phone, reminderText(batch, tz, at < now ? now : at));
+  }
+  const week = upcoming.filter((a) => new Date(a.due_at) - now <= 7 * DAY);
+  await sms.sendSms(req.user.phone, summaryText(week, tz));
+  res.json({ ok: true });
 });
 
 app.post('/api/calendar/sync', auth, async (req, res) => {

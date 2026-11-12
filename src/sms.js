@@ -37,10 +37,15 @@ class SmsError extends Error {
   get permanent() { return this.optedOut || BAD_NUMBER.includes(this.code) || (this.status >= 400 && this.status < 500 && this.status !== 429); }
 }
 
+// Without Twilio, texts are kept here so test mode can show them on screen.
+const outbox = [];
+
 async function sendSms(to, body) {
   body = toPlain(body);
   if (!live) {
     console.log(`[sms:dev] to ${to}: ${body}`);
+    outbox.push({ to, body, at: new Date().toISOString() });
+    if (outbox.length > 500) outbox.shift();
     return { dev: true };
   }
   const res = await fetch(
@@ -71,4 +76,4 @@ function verifyTwilioRequest(url, params, signature) {
   return expected.length === signature.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
 
-module.exports = { sendSms, toPlain, verifyTwilioRequest, SmsError, live };
+module.exports = { sendSms, toPlain, verifyTwilioRequest, SmsError, live, outbox };
