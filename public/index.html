@@ -357,7 +357,7 @@
         <input id="schoolHost" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="yourschool.instructure.com">
       </div>
       <ol class="howto">
-        <li><div><a class="btn sm" id="openCanvas" target="_blank" rel="noopener">Open the Canvas app</a><br><span class="hint">Don't have it? Get <b>Canvas Student</b> from the App Store.</span></div></li>
+        <li><div><a class="btn sm" id="openCanvas">Open the Canvas app</a><br><span class="hint" id="openHint">Don't have it? Get <b>Canvas Student</b> from the App Store.</span></div></li>
         <li><div>Tap the <b>three lines ☰</b> at the top left, then tap <b>Settings</b>.</div></li>
         <li><div>Tap <b>Subscribe to Calendar</b>, then copy that link.</div></li>
         <li><div>Come back to StuCal and tap:<br><button class="btn sm mt" id="pasteCal" type="button">Paste my link</button></div></li>
@@ -499,7 +499,9 @@ function updateCanvasLink() {
   $('otherSchool').classList.toggle('hidden', !other);
   const host = schoolHost();
   const ok = /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host);
-  $('openCanvas').href = ok ? `https://${host}/calendar` : '#';
+  // The Canvas Student app's own link type. A normal https link would open inside StuCal's
+  // built-in browser on iPhone instead of handing off to the app.
+  $('openCanvas').href = ok ? `canvas-courses://${host}/calendar` : '#';
   $('openCanvas').classList.toggle('disabled', !ok);
   $('openCanvas').style.opacity = ok ? '' : '.5';
   saveSchool({ choice: $('school').value, host: $('schoolHost').value });
@@ -522,7 +524,14 @@ function initCanvasHelper() {
 $('school').onchange = updateCanvasLink;
 $('schoolHost').oninput = updateCanvasLink;
 $('openCanvas').onclick = (e) => {
-  if ($('openCanvas').getAttribute('href') === '#') { e.preventDefault(); $('schoolHost').focus(); }
+  if ($('openCanvas').getAttribute('href') === '#') { e.preventDefault(); $('schoolHost').focus(); return; }
+  // If the Canvas app didn't open (not installed, or the phone blocked it), StuCal is still on screen.
+  setTimeout(() => {
+    if (document.visibilityState === 'visible') {
+      $('openHint').innerHTML = "Didn't open? Open the <b>Canvas</b> app from your Home Screen yourself, then do steps 2 and 3. Don't have it? Get <b>Canvas Student</b> from the App Store.";
+      $('openHint').style.color = 'var(--danger)';
+    }
+  }, 2500);
 };
 
 const looksLikeFeed = (t) => /^(https?|webcal):\/\/\S+\.ics(\?\S*)?$/i.test(t) || /^(https?|webcal):\/\/\S+\/feeds\/calendars\/\S+$/i.test(t);
