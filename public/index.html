@@ -152,6 +152,12 @@
   .status .dotc { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
   .status.on .dotc { background: var(--ok); box-shadow: 0 0 0 4px rgba(94,227,161,.15); }
   .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  .or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 20px 0 0; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  ul.review li { align-items: flex-start; }
+  ul.review .t input { margin: 0 0 6px; padding: 9px 11px; font-size: 15px; }
+  ul.review .t small { display: block; font-size: 13px; color: var(--muted); }
+  ul.review li.off .t { opacity: .45; }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
   ul.list li:first-child { border-top: 0; padding-top: 4px; }
@@ -173,6 +179,7 @@
   <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
   <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></symbol>
 </svg>
 
@@ -354,6 +361,22 @@
 
   <div class="card">
     <h2>Add something Canvas doesn't have</h2>
+
+    <div id="scanBox" class="hidden">
+      <p class="hint" style="margin:0 0 12px">Screenshot your MyMathLab (or any) assignment list, then add it here. StuCal reads the due dates for you.</p>
+      <button class="btn block" id="scanBtn" type="button"><svg class="i" style="width:20px;height:20px"><use href="#i-camera"/></svg> Add from screenshot</button>
+      <input type="file" id="scanFile" accept="image/*" hidden>
+      <p class="hint" id="scanStatus" style="margin:10px 0 0"></p>
+      <div id="scanReview" class="hidden">
+        <ul class="list review" id="scanList"></ul>
+        <div class="btns mt">
+          <button class="btn" id="scanAdd" type="button">Add</button>
+          <button class="btn ghost" id="scanCancel" type="button">Cancel</button>
+        </div>
+      </div>
+      <p class="or"><span>or type it in</span></p>
+    </div>
+
     <form id="addForm">
       <label for="title">What is it?</label>
       <input id="title" placeholder="MyMathLab 5.3" required>
@@ -420,6 +443,97 @@ document.addEventListener('click', async (e) => {
 });
 
 // ---------- dashboard ----------
+// ---------- add from screenshot ----------
+function toLocalInput(iso) {
+  const d = new Date(iso), pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Shrink the screenshot before sending: faster on cell data and easier for the AI.
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Couldn't open that picture. Try a different screenshot.")); };
+    img.src = url;
+  });
+}
+
+let scanFound = [];
+function updateScanButton() {
+  const n = scanFound.filter((f) => f.keep).length;
+  $('scanAdd').textContent = n ? `Add ${n} assignment${n === 1 ? '' : 's'}` : 'Nothing selected';
+  $('scanAdd').disabled = !n;
+}
+
+function showScanReview() {
+  $('scanList').innerHTML = '';
+  for (const f of scanFound) {
+    const li = document.createElement('li');
+    li.innerHTML = `<input type="checkbox" aria-label="Add this">
+      <div class="t"><input type="text" aria-label="Assignment name"><input type="datetime-local" aria-label="Due"><small></small></div>`;
+    const [check, title, due] = li.querySelectorAll('input');
+    const note = li.querySelector('small');
+    check.checked = f.keep;
+    title.value = f.title;
+    due.value = toLocalInput(f.dueAt);
+    note.textContent = [f.label, f.already ? 'already in your list' : ''].filter(Boolean).join(' · ');
+    li.classList.toggle('off', !f.keep);
+    check.onchange = () => { f.keep = check.checked; li.classList.toggle('off', !f.keep); updateScanButton(); };
+    title.oninput = () => { f.title = title.value; };
+    due.onchange = () => { if (due.value) f.dueAt = new Date(due.value).toISOString(); };
+    $('scanList').append(li);
+  }
+  $('scanReview').classList.remove('hidden');
+  updateScanButton();
+}
+
+function resetScan(message = '') {
+  scanFound = [];
+  $('scanReview').classList.add('hidden');
+  $('scanBtn').classList.remove('hidden');
+  $('scanStatus').style.color = '';
+  $('scanStatus').textContent = message;
+}
+
+$('scanBtn').onclick = () => { $('scanFile').value = ''; $('scanFile').click(); };
+$('scanFile').onchange = async () => {
+  const file = $('scanFile').files[0];
+  if (!file) return;
+  resetScan('Reading your screenshot…');
+  $('scanBtn').classList.add('hidden');
+  try {
+    const image = await shrinkImage(file);
+    const { found } = await api('/api/scan', { body: { image } });
+    if (!found.length) return resetScan("Didn't find any upcoming assignments with due dates in that screenshot.");
+    scanFound = found.map((f) => ({ ...f, keep: !f.already }));
+    $('scanStatus').textContent = `Found ${found.length}. Check the names and dates, then add them.`;
+    showScanReview();
+  } catch (err) {
+    resetScan(err.message);
+    $('scanStatus').style.color = 'var(--danger)';
+  }
+};
+$('scanCancel').onclick = () => resetScan();
+$('scanAdd').onclick = async () => {
+  try {
+    const items = scanFound.filter((f) => f.keep).map(({ title, course, dueAt }) => ({ title, course, dueAt }));
+    const { added } = await api('/api/assignments/bulk', { body: { items } });
+    resetScan(added ? `Added ${added} assignment${added === 1 ? '' : 's'}. You'll get reminders for ${added === 1 ? 'it' : 'them'}.` : 'Those were already in your list.');
+    $('scanStatus').style.color = 'var(--ok)';
+    loadList();
+  } catch (err) { $('scanStatus').style.color = 'var(--danger)'; $('scanStatus').textContent = err.message; }
+};
+
 function fmtDue(iso) {
   const d = new Date(iso), now = new Date();
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -456,6 +570,7 @@ function showApp() {
   $('testCard').classList.toggle('hidden', !(me.testMode && me.hasPhone));
   if (me.testMode && me.hasPhone) loadOutbox();
   $('deviceNote').classList.toggle('hidden', me.hasPhone);
+  $('scanBox').classList.toggle('hidden', !config.scan);
   renderNotifications();
 }
 

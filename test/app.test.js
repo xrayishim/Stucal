@@ -437,3 +437,95 @@ test('past-due assignments drop off the list', async (t) => {
   const { assignments } = await (await fetch(base + '/api/assignments', { headers: { cookie } })).json();
   assert.deepEqual(assignments.map((a) => a.title), ['Due tonight']);
 });
+
+test('screenshot import: AI reads it, past and duplicate items handled, nothing saved until Add', async (t) => {
+  const server = app.listen(0);
+  t.after(() => { server.close(); delete process.env.GEMINI_API_KEY; });
+  const base = `http://localhost:${server.address().port}`;
+  const json = { 'Content-Type': 'application/json' };
+  db.exec(`DELETE FROM users; DELETE FROM rate_events`);
+
+  // turned off until there's a key
+  assert.equal((await (await fetch(base + '/api/config')).json()).scan, false);
+  process.env.GEMINI_API_KEY = 'test-key';
+  assert.equal((await (await fetch(base + '/api/config')).json()).scan, true);
+
+  const signup = await fetch(base + '/api/auth/quick', { method: 'POST', headers: json, body: JSON.stringify({ timezone: 'America/New_York' }) });
+  const cookie = signup.headers.get('set-cookie').split(';')[0];
+  const userId = db.prepare(`SELECT id FROM users`).get().id;
+  // they already have their Canvas classes, and one MyMathLab item typed in by hand
+  const add = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at, source) VALUES (?, ?, ?, ?, ?)`);
+  add.run(userId, 'Research Paper Outline', 'ENC1101 MRG', '2099-01-01T04:59:00.000Z', 'calendar');
+  add.run(userId, 'Chapter 7 Quiz', 'MAC1105 MRG', '2099-01-01T04:59:00.000Z', 'calendar');
+
+  const fmt = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
+  const tomorrow = fmt(new Date(Date.now() + 864e5));
+  const nextWeek = fmt(new Date(Date.now() + 7 * 864e5));
+  const lastWeek = fmt(new Date(Date.now() - 7 * 864e5));
+  const realFetch = globalThis.fetch;
+  let sentToGemini;
+  t.mock.method(globalThis, 'fetch', async (url, opts) => {
+    if (!String(url).startsWith('https://generativelanguage.googleapis.com/')) return realFetch(url, opts);
+    sentToGemini = { url: String(url), headers: opts.headers, body: JSON.parse(opts.body) };
+    const assignments = [
+      { title: '5.3 Homework', class: 'Math (MAC1105 MRG)', due_date: tomorrow, due_time: '' },
+      { title: '5.4 Homework', class: 'Math (MAC1105 MRG)', due_date: nextWeek, due_time: '14:00' },
+      { title: '5.1 Homework', class: 'Math (MAC1105 MRG)', due_date: lastWeek, due_time: '' }, // already past
+      { title: 'Lab Safety Quiz', class: '', due_date: nextWeek, due_time: '' },                // no class known
+    ];
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ assignments }) }] } }] }), { status: 200 });
+  });
+
+  const image = 'data:image/jpeg;base64,' + Buffer.alloc(300, 7).toString('base64');
+  const r = await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image }) });
+  assert.equal(r.status, 200);
+  const { found } = await r.json();
+
+  // what was sent: the key in a header (not the URL), the picture, today's date and their classes
+  assert.match(sentToGemini.url, /models\/gemini-flash-latest:generateContent$/);
+  assert.equal(sentToGemini.headers['x-goog-api-key'], 'test-key');
+  const parts = sentToGemini.body.contents[0].parts;
+  assert.equal(parts[0].inlineData.mimeType, 'image/jpeg');
+  assert.match(parts[1].text, /Math \(MAC1105 MRG\)/);
+  assert.match(parts[1].text, /English \(ENC1101 MRG\)/);
+
+  // past item dropped; class matched to their Canvas class (so it reads "Math"); unknown class left off
+  assert.deepEqual(found.map((f) => [f.title, f.course, f.label]), [
+    ['5.3 Homework', 'MAC1105 MRG', 'Math'],
+    ['5.4 Homework', 'MAC1105 MRG', 'Math'],
+    ['Lab Safety Quiz', null, null],
+  ]);
+  const local = (iso) => new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  assert.match(local(found[0].dueAt), /^11:59\sPM$/); // no time shown = end of day
+  assert.match(local(found[1].dueAt), /^2:00\sPM$/);
+  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM assignments`).get().n, 2); // nothing saved yet
+
+  // they add them; adding the same screenshot again doesn't duplicate
+  const bulk = (items) => fetch(base + '/api/assignments/bulk', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ items }) }).then((x) => x.json());
+  assert.deepEqual(await bulk(found), { added: 3 });
+  assert.deepEqual(await bulk(found), { added: 0 });
+  const again = await (await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image }) })).json();
+  assert.ok(again.found.every((f) => f.already));
+
+  // reminders for them read naturally, with or without a class
+  const { reminderPush } = require('../src/reminders');
+  const saved = db.prepare(`SELECT * FROM assignments WHERE source = 'screenshot' ORDER BY due_at`).all();
+  assert.equal(reminderPush([saved[0]], 'America/New_York').body, '5.3 Homework (Math)');
+  assert.equal(reminderPush([saved.find((a) => a.title === 'Lab Safety Quiz')], 'America/New_York').body, 'Lab Safety Quiz');
+
+  // not a picture
+  assert.equal((await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image: 'hello' }) })).status, 400);
+
+  // Google's free limit hit: a clear message, not a crash
+  t.mock.method(console, 'error', () => {});
+  globalThis.fetch.mock.mockImplementation(async (url, opts) => (String(url).includes('googleapis')
+    ? new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 }) : realFetch(url, opts)));
+  const busy = await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image }) });
+  assert.equal(busy.status, 429);
+  assert.match((await busy.json()).error, /free limit/);
+
+  // daily limit per person
+  db.exec(`DELETE FROM rate_events`);
+  for (let i = 0; i < 20; i++) db.prepare(`INSERT INTO rate_events (key, at) VALUES (?, ?)`).run(`scan:${userId}`, Date.now());
+  assert.equal((await fetch(base + '/api/scan', { method: 'POST', headers: { ...json, cookie }, body: JSON.stringify({ image }) })).status, 429);
+});

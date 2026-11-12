@@ -7,6 +7,7 @@ const calendar = require('./calendar');
 const { friendlyCourse } = require('./subjects');
 const { sendDueReminders, sendWeeklySummaries, reminderText, summaryText, reminderPush, summaryPush, weekFor } = require('./reminders');
 const notify = require('./notify');
+const scan = require('./scan');
 
 const fs = require('node:fs');
 
@@ -21,7 +22,10 @@ const app = express();
 // Railway, Render, Fly etc. sit behind one proxy; trust it so req.ip is the student's real IP.
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
-app.use(express.json());
+// Screenshots are bigger than normal requests, so that one route gets a higher size limit.
+const smallJson = express.json();
+const imageJson = express.json({ limit: '8mb' });
+app.use((req, res, next) => (req.path === '/api/scan' ? imageJson : smallJson)(req, res, next));
 
 // Privacy and Terms pages get the contact email and app address filled in.
 function legalPage(file) {
@@ -190,7 +194,7 @@ app.post('/api/auth/quick', (req, res) => {
 
 // What this StuCal can do, so the page shows the right sign-up.
 app.get('/api/config', (req, res) => {
-  res.json({ sms: sms.live, testMode: TEST_MODE, pushKey: notify.publicKey });
+  res.json({ sms: sms.live, testMode: TEST_MODE, pushKey: notify.publicKey, scan: scan.enabled() });
 });
 
 app.post('/api/auth/logout', auth, (req, res) => {
@@ -335,6 +339,50 @@ app.post('/api/push/test', auth, async (req, res) => {
   for (const p of list) delivered += (await notify.sendPush(req.user, p.push)).delivered;
   if (!delivered) return res.status(502).json({ error: "Couldn't send a notification. Try turning notifications off and on again." });
   res.json({ ok: true, sent: list.length });
+});
+
+// ---------- add assignments from a screenshot ----------
+const SCAN_MAX_PER_DAY = Number(process.env.SCAN_MAX_PER_DAY) || 500; // whole app, keeps us inside the AI's free tier
+const findSame = db.prepare(`SELECT 1 FROM assignments WHERE user_id = ? AND lower(title) = lower(?) AND due_at = ?`);
+
+// Reads the screenshot and returns what it found. Nothing is saved until they review it and tap Add.
+app.post('/api/scan', auth, async (req, res) => {
+  const match = String(req.body.image || '').match(/^(?:data:(image\/(?:jpeg|png|webp|heic|heif));base64,)?([A-Za-z0-9+/=]+)$/);
+  if (!match || match[2].length < 100) return res.status(400).json({ error: "That doesn't look like a picture. Try another screenshot." });
+  const limit = allow([[`scan:${req.user.id}`, DAY, 20], ['scan-all', DAY, SCAN_MAX_PER_DAY]]);
+  if (!limit.ok) {
+    if (limit.key === 'scan-all') console.error(`ALERT: screenshot reading cap (${SCAN_MAX_PER_DAY}/day) reached`);
+    return res.status(429).json({ error: "That's a lot of screenshots for today. Try again tomorrow." });
+  }
+  const classes = db.prepare(`SELECT DISTINCT course FROM assignments WHERE user_id = ? AND course IS NOT NULL ORDER BY course`)
+    .all(req.user.id).map((r) => r.course);
+  try {
+    const found = await scan.scanScreenshot({
+      imageBase64: match[2], mimeType: match[1] || req.body.mimeType || 'image/jpeg', timezone: req.user.timezone, classes,
+    });
+    res.json({
+      found: found.map((f) => ({ ...f, label: friendlyCourse(f.course), already: Boolean(findSame.get(req.user.id, f.title, f.dueAt)) })),
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || "Couldn't read that screenshot." });
+  }
+});
+
+// Saves the assignments they kept on the review screen. Skips anything they already have.
+app.post('/api/assignments/bulk', auth, (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items.slice(0, 50) : [];
+  const insert = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at, source) VALUES (?, ?, ?, ?, 'screenshot')`);
+  let added = 0;
+  for (const it of items) {
+    const title = String(it.title || '').trim().slice(0, 200);
+    const course = String(it.course || '').trim().slice(0, 100) || null;
+    const due = new Date(it.dueAt);
+    if (!title || isNaN(due) || due <= new Date()) continue;
+    if (findSame.get(req.user.id, title, due.toISOString())) continue;
+    insert.run(req.user.id, title, course, due.toISOString());
+    added++;
+  }
+  res.json({ added });
 });
 
 app.post('/api/calendar/sync', auth, async (req, res) => {

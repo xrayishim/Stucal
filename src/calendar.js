@@ -125,4 +125,4 @@ async function syncAll() {
   }
 }
 
-module.exports = { parseIcs, splitCourse, syncUser, syncAll };
+module.exports = { parseIcs, splitCourse, syncUser, syncAll, zonedToUtc };
