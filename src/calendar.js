@@ -75,19 +75,45 @@ const upsert = db.prepare(`
     due_at = excluded.due_at
 `);
 
+// Canvas feeds mix assignments ("event-assignment-123") with calendar events
+// ("event-calendar-event-456"). Calendar events tagged with a class (like an
+// in-class exam) are worth a reminder; untagged ones are school-wide dates such
+// as "Thanksgiving Break" or "Graduation", which shouldn't be texted as "due".
+function isWorthReminding(ev, course) {
+  if (ev.uid.startsWith('event-calendar-event-') && !course) return false;
+  return true;
+}
+
+const upcomingFromCalendar = db.prepare(`
+  SELECT id, external_uid FROM assignments WHERE user_id = ? AND source = 'calendar' AND due_at > ?
+`);
+const removeAssignment = db.prepare(`DELETE FROM assignments WHERE id = ?`);
+
 async function syncUser(user) {
   if (!user.calendar_url) return 0;
   const url = user.calendar_url.replace(/^webcal:/i, 'https:');
   const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`Calendar feed returned ${res.status}`);
-  const events = parseIcs(await res.text(), user.timezone);
+  const text = await res.text();
+  if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("That link isn't a calendar feed");
+  const events = parseIcs(text, user.timezone);
   const cutoff = Date.now() - 7 * 864e5; // skip anything older than a week
+  const kept = new Set();
   let count = 0;
   for (const ev of events) {
     if (ev.due.getTime() < cutoff) continue;
     const { title, course } = splitCourse(ev.summary);
+    if (!isWorthReminding(ev, course)) continue;
     upsert.run(user.id, title, course, ev.due.toISOString(), ev.uid);
+    kept.add(ev.uid);
     count++;
+  }
+  // If a teacher deletes an assignment (or it was a school-wide event imported
+  // before), drop it so nobody gets reminded about it. Past items are left alone.
+  if (events.length) {
+    for (const row of upcomingFromCalendar.all(user.id, new Date().toISOString())) {
+      if (!kept.has(row.external_uid)) removeAssignment.run(row.id);
+    }
   }
   return count;
 }

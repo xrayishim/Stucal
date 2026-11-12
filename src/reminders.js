@@ -3,6 +3,7 @@ const sms = require('./sms');
 
 const SUMMARY_HOUR = 18;      // Sunday summary goes out at 6 PM local time
 const SUMMARY_MAX_ITEMS = 12; // keep the text short enough to read (and cheap to send)
+const REMINDER_MAX_ITEMS = 10;
 const FOOTER = 'Reply STOP to opt out.';
 
 function dayKey(date, tz) {
@@ -42,11 +43,12 @@ function reminderText(items, tz, now = new Date()) {
   }
   const days = new Set(items.map((a) => dayText(new Date(a.due_at), tz, now)));
   const when = days.size === 1 ? ` due ${[...days][0]}` : ' coming up';
-  const lines = items.map((a) => {
+  const lines = items.slice(0, REMINDER_MAX_ITEMS).map((a) => {
     const due = new Date(a.due_at);
     const t = days.size === 1 ? timeText(due, tz) : whenText(due, tz, now);
     return `- ${label(a)} (${t})`;
   });
+  if (items.length > REMINDER_MAX_ITEMS) lines.push(`+${items.length - REMINDER_MAX_ITEMS} more on StuCal`);
   return `StuCal: You have ${items.length} assignments${when}:\n${lines.join('\n')}\n${FOOTER}`;
 }
 
@@ -123,7 +125,7 @@ function summaryText(items, tz) {
     if (day !== lastDay) { lines.push(`\n${day}:`); lastDay = day; }
     lines.push(`- ${label(a)} (${timeText(due, tz)})`);
   }
-  if (items.length > SUMMARY_MAX_ITEMS) lines.push(`\n+${items.length - SUMMARY_MAX_ITEMS} more on stucal`);
+  if (items.length > SUMMARY_MAX_ITEMS) lines.push(`\n+${items.length - SUMMARY_MAX_ITEMS} more on StuCal`);
   const n = items.length;
   return `StuCal: Your week ahead - ${n} assignment${n === 1 ? '' : 's'}\n${lines.join('\n')}\n\n${FOOTER}`;
 }

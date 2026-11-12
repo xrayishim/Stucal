@@ -250,3 +250,47 @@ test('test mode shows the login code and the texts StuCal would send', async (t)
   // preview doesn't count as the real reminder
   assert.equal(db.prepare(`SELECT reminded_at FROM assignments WHERE title = 'HW 5.3'`).get().reminded_at, null);
 });
+
+test('Canvas sync skips school-wide events and drops deleted assignments', async (t) => {
+  const http = require('node:http');
+  const { syncUser } = require('../src/calendar');
+  const ev = (uid, summary, start) => `BEGIN:VEVENT\r\nUID:${uid}\r\nDTSTART;VALUE=DATE;VALUE=DATE:${start}\r\nCLASS:PUBLIC\r\nSUMMARY:${summary}\r\nEND:VEVENT`;
+  const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+  let events = [
+    ev('event-assignment-1', 'Section 4.3 HW\\, Part 1 [MAC1105 MRG]', day(2)),
+    ev('event-assignment-2', 'Chapter 7 Quiz [COP1000 MRG]', day(3)),
+    ev('event-calendar-event-9', 'Thanksgiving Break ', day(4)),
+    ev('event-calendar-event-10', 'Midterm in class [ENC1101 MRG]', day(5)),
+  ];
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/calendar');
+    res.end(`BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${events.join('\r\n')}\r\nEND:VCALENDAR\r\n`);
+  }).listen(0);
+  t.after(() => server.close());
+
+  db.exec(`DELETE FROM users`);
+  db.prepare(`INSERT INTO users (id, phone, timezone, calendar_url) VALUES (80, '+12025550180', 'America/New_York', ?)`)
+    .run(`http://localhost:${server.address().port}/feeds/calendars/user_x.ics`);
+  const user = db.prepare(`SELECT * FROM users WHERE id = 80`).get();
+  const titles = () => db.prepare(`SELECT title, course FROM assignments WHERE user_id = 80 ORDER BY due_at`).all().map((r) => `${r.course}: ${r.title}`);
+
+  assert.equal(await syncUser(user), 3);
+  assert.deepEqual(titles(), ['MAC1105 MRG: Section 4.3 HW, Part 1', 'COP1000 MRG: Chapter 7 Quiz', 'ENC1101 MRG: Midterm in class']);
+  const homework = db.prepare(`SELECT due_at FROM assignments WHERE external_uid = 'event-assignment-1'`).get();
+  assert.match(new Date(homework.due_at).toLocaleTimeString('en-US', { timeZone: 'America/New_York' }), /^11:59:00\sPM$/);
+
+  // teacher deletes the quiz; a hand-added assignment is untouched
+  db.prepare(`INSERT INTO assignments (user_id, title, due_at) VALUES (80, 'MyMathLab 5.3', ?)`).run(new Date(Date.now() + 864e5).toISOString());
+  events = events.filter((e) => !e.includes('event-assignment-2'));
+  assert.equal(await syncUser(user), 2);
+  assert.deepEqual(titles(), ['null: MyMathLab 5.3', 'MAC1105 MRG: Section 4.3 HW, Part 1', 'ENC1101 MRG: Midterm in class']);
+});
+
+test('a very busy day is capped at 10 lines', () => {
+  const { reminderText } = require('../src/reminders');
+  const items = Array.from({ length: 15 }, (_, i) => ({ title: `Task ${i + 1}`, course: 'ENC1101', due_at: '2026-11-30T04:59:00Z' }));
+  const msg = reminderText(items, 'America/New_York', new Date('2026-11-29T00:00:00Z'));
+  assert.match(msg, /You have 15 assignments due tomorrow/);
+  assert.equal(msg.match(/^- /gm).length, 10);
+  assert.match(msg, /\+5 more on StuCal/);
+});
