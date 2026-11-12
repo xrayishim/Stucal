@@ -75,3 +75,45 @@ test('signup, add assignment, get exactly one text', async (t) => {
   const unauth = await fetch(base + '/api/assignments');
   assert.equal(unauth.status, 401);
 });
+
+test('groups same-day reminders into one text', async (t) => {
+  const { sendDueReminders } = require('../src/reminders');
+  db.exec(`DELETE FROM users`);
+  db.prepare(`INSERT INTO users (id, phone, timezone, remind_hours) VALUES (50, '+15550000050', 'America/New_York', 24)`).run();
+  const add = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at) VALUES (50, ?, ?, ?)`);
+  const now = new Date('2026-11-12T23:00:00Z');                 // Thu 6 PM ET
+  add.run('Chapter 5 HW', 'Algebra', '2026-11-13T22:00:00Z');   // Fri 5 PM: inside 24h
+  add.run('Lab Report', 'Chemistry', '2026-11-14T04:59:00Z');   // Fri 11:59 PM: same day, 30h out
+  add.run('Essay', 'English', '2026-11-16T04:59:00Z');          // Sun: later, not included
+
+  const logs = [];
+  t.mock.method(console, 'log', (m) => logs.push(m));
+  assert.equal(await sendDueReminders(now), 1);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /You have 2 assignments due tomorrow:\n• Algebra — Chapter 5 HW \(5:00 PM\)\n• Chemistry — Lab Report \(11:59 PM\)/);
+  assert.doesNotMatch(logs[0], /Essay/);
+  assert.equal(await sendDueReminders(now), 0);
+});
+
+test('Sunday night summary goes out once, at 6 PM local', async (t) => {
+  const { sendWeeklySummaries } = require('../src/reminders');
+  db.exec(`DELETE FROM users`);
+  db.prepare(`INSERT INTO users (id, phone, timezone) VALUES (60, '+15550000060', 'America/Chicago')`).run();
+  db.prepare(`INSERT INTO users (id, phone, timezone, weekly_summary) VALUES (61, '+15550000061', 'America/Chicago', 0)`).run();
+  const add = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at, done) VALUES (?, ?, ?, ?, ?)`);
+  add.run(60, 'Chapter 6 HW', 'Algebra', '2026-11-17T05:59:00Z', 0); // Mon 11:59 PM CT
+  add.run(60, 'Quiz', 'Bio', '2026-11-19T20:00:00Z', 0);             // Thu 2 PM CT
+  add.run(60, 'Done already', 'Bio', '2026-11-19T21:00:00Z', 1);     // checked off
+  add.run(60, 'Next week', 'Bio', '2026-11-25T20:00:00Z', 0);        // too far out
+  add.run(61, 'Opted out', 'Bio', '2026-11-17T20:00:00Z', 0);
+
+  const logs = [];
+  t.mock.method(console, 'log', (m) => logs.push(m));
+  assert.equal(await sendWeeklySummaries(new Date('2026-11-15T23:00:00Z')), 0); // Sun 5 PM CT: too early
+  assert.equal(await sendWeeklySummaries(new Date('2026-11-14T01:00:00Z')), 0); // Fri: wrong day
+  assert.equal(await sendWeeklySummaries(new Date('2026-11-16T00:05:00Z')), 1); // Sun 6:05 PM CT
+  assert.equal(await sendWeeklySummaries(new Date('2026-11-16T01:00:00Z')), 0); // already sent tonight
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /to \+15550000060: StuCal: Your week ahead 📅 2 assignments\n\nMon:\n• Algebra — Chapter 6 HW \(11:59 PM\)\n\nThu:\n• Bio — Quiz \(2:00 PM\)/);
+  assert.doesNotMatch(logs[0], /Done already|Next week/);
+});

@@ -4,7 +4,7 @@ const path = require('node:path');
 const db = require('./db');
 const sms = require('./sms');
 const calendar = require('./calendar');
-const { sendDueReminders } = require('./reminders');
+const { sendDueReminders, sendWeeklySummaries } = require('./reminders');
 
 const app = express();
 
@@ -43,6 +43,7 @@ function publicUser(u) {
     timezone: u.timezone,
     remindHours: u.remind_hours,
     calendarUrl: u.calendar_url,
+    weeklySummary: Boolean(u.weekly_summary),
   };
 }
 
@@ -95,7 +96,10 @@ app.post('/api/auth/logout', auth, (req, res) => {
 app.get('/api/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
 
 app.patch('/api/me', auth, async (req, res) => {
-  const { remindHours, timezone, calendarUrl } = req.body;
+  const { remindHours, timezone, calendarUrl, weeklySummary } = req.body;
+  if (weeklySummary !== undefined) {
+    db.prepare(`UPDATE users SET weekly_summary = ? WHERE id = ?`).run(weeklySummary ? 1 : 0, req.user.id);
+  }
   if (remindHours !== undefined) {
     const h = Number(remindHours);
     if (!Number.isInteger(h) || h < 1 || h > 168) return res.status(400).json({ error: 'Reminder must be 1–168 hours ahead' });
@@ -158,9 +162,13 @@ app.delete('/api/assignments/:id', auth, (req, res) => {
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
   app.listen(port, () => console.log(`StuCal running on http://localhost:${port}${sms.live ? '' : '  (dev mode: texts print here)'}`));
-  setInterval(() => sendDueReminders().catch(console.error), 60e3);   // check every minute
+  const tick = async () => {
+    await sendDueReminders().catch(console.error);     // day-before reminders
+    await sendWeeklySummaries().catch(console.error);  // Sunday 6 PM "your week ahead"
+  };
+  setInterval(tick, 60e3);                                              // check every minute
   setInterval(() => calendar.syncAll().catch(console.error), 60 * 60e3); // re-pull calendars hourly
-  sendDueReminders().catch(console.error);
+  tick();
 }
 
 module.exports = app;

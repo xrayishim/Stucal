@@ -125,6 +125,8 @@
   .back { background: none; border: 0; color: var(--muted); padding: 0; margin-bottom: 18px; font-size: 15px; }
   .back:hover { color: var(--text); }
   details summary { cursor: pointer; color: var(--blue-hi); font-size: 14px; margin-top: 10px; }
+  label.check { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 15px; cursor: pointer; }
+  label.check input { width: 20px; height: 20px; accent-color: var(--blue); flex: none; }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
   ul.list li:first-child { border-top: 0; padding-top: 4px; }
@@ -197,7 +199,7 @@
       <div class="feature">
         <svg class="i"><use href="#i-bell"/></svg>
         <h3>Never miss a deadline</h3>
-        <p>Get upcoming assignment reminders through SMS.</p>
+        <p>Get a text the day before each assignment is due.</p>
       </div>
       <div class="feature">
         <svg class="i"><use href="#i-chat"/></svg>
@@ -207,7 +209,7 @@
       <div class="feature">
         <svg class="i"><use href="#i-cal"/></svg>
         <h3>Your week, simplified</h3>
-        <p>See upcoming assignments in one organized view.</p>
+        <p>Every Sunday night, get one text with everything due that week.</p>
       </div>
     </div>
   </section>
@@ -218,7 +220,7 @@
     <ol class="steps">
       <li><div><b>Sign up with your phone number</b><span>We text you a code. No password.</span></div></li>
       <li><div><b>Paste your Canvas calendar link</b><span>Canvas → Calendar → Calendar Feed. Your assignments show up right away.</span></div></li>
-      <li><div><b>Get a text before things are due</b><span>Pick when: 1 hour to 2 days before. Reply STOP anytime.</span></div></li>
+      <li><div><b>Get your texts</b><span>Your week ahead every Sunday night, then a reminder the day before each thing is due. Reply STOP anytime.</span></div></li>
     </ol>
   </section>
 
@@ -275,6 +277,7 @@
         <option value="24">1 day before</option>
         <option value="48">2 days before</option>
       </select>
+      <label class="check mt"><input type="checkbox" id="weekly"> Sunday night summary of my week</label>
       <button class="btn mt">Save</button>
       <div class="err" id="setErr"></div>
     </form>
@@ -368,6 +371,7 @@ function showApp() {
   $('remind').value = String(me.remindHours);
   if (!$('remind').value) $('remind').value = '24';
   $('cal').value = me.calendarUrl || '';
+  $('weekly').checked = me.weeklySummary;
   loadList();
 }
 
@@ -401,7 +405,7 @@ $('addForm').onsubmit = async (e) => {
 $('settingsForm').onsubmit = async (e) => {
   e.preventDefault(); $('setErr').textContent = '';
   try {
-    const r = await api('/api/me', { method: 'PATCH', body: { remindHours: Number($('remind').value), calendarUrl: $('cal').value,
+    const r = await api('/api/me', { method: 'PATCH', body: { remindHours: Number($('remind').value), calendarUrl: $('cal').value, weeklySummary: $('weekly').checked,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
     me = r.user;
     $('setErr').style.color = 'var(--ok)';

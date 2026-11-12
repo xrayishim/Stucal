@@ -45,4 +45,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_assignments_due ON assignments(due_at) WHERE reminded_at IS NULL AND done = 0;
 `);
 
+// Columns added after the first version; ignore "duplicate column" on databases that already have them.
+for (const sql of [
+  `ALTER TABLE users ADD COLUMN weekly_summary INTEGER NOT NULL DEFAULT 1`, // Sunday night text on/off
+  `ALTER TABLE users ADD COLUMN last_summary_on TEXT`,                      // local date of last Sunday text
+]) {
+  try { db.exec(sql); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+}
+
 module.exports = db;

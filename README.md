@@ -1,16 +1,17 @@
-# Stucal
+# StuCal
 
-Stucal texts students before their Canvas assignments are due. It's free.
+StuCal texts students before their Canvas assignments are due. It's free.
 
 > **Stucal:** Lab Report 3 (CHEM-101-02) is due tomorrow at 11:59 PM. Reply STOP to opt out.
 
 ## What it does
 
 - **Login by text.** Students enter a phone number and type in the code they get. There are no passwords.
-- **Connect Canvas once.** Students paste their Canvas calendar link, and Stucal imports every assignment and re-checks it every hour. If a teacher moves a deadline, the reminder moves with it. Calendar links from Blackboard, Moodle and Google Classroom work too.
+- **Connect Canvas once.** Students paste their Canvas calendar link, and StuCal imports every assignment and re-checks it every hour. If a teacher moves a deadline, the reminder moves with it. Calendar links from Blackboard, Moodle and Google Classroom work too.
 - **Add things Canvas doesn't have,** such as MyMathLab homework when the teacher doesn't sync it.
-- **Students choose when the text arrives:** 1, 3, 12, 24 or 48 hours before the deadline.
-- **Each assignment gets exactly one text,** and assignments checked off get none.
+- **Sunday night summary:** at 6 PM local time every Sunday, one text lists everything due in the coming week, grouped by day. Students can turn it off.
+- **Day-before reminder:** by default, a text 1 day before each assignment is due (students can pick 1, 3, 12, 24 or 48 hours). Assignments due the same day come in one text.
+- **Each assignment gets exactly one reminder,** and assignments checked off get none.
 
 ### Finding your Canvas calendar link
 
@@ -37,7 +38,6 @@ Running costs are roughly $0.20–0.30 per student per month in texts, plus abou
 
 - AI texting: "what's due this week?", "add bio quiz friday 2pm", "done with the lab report"
 - A daily "any new MyMathLab homework?" check-in text
-- A Sunday night summary of the week
 - A second reminder if something isn't marked done
 - A paid plan
 
