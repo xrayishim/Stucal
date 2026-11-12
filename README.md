@@ -2,7 +2,7 @@
 
 StuCal texts students before their Canvas assignments are due. It's free.
 
-> **Stucal:** Lab Report 3 (CHEM-101-02) is due tomorrow at 11:59 PM. Reply STOP to opt out.
+> **StuCal:** Lab Report 3 (CHEM-101-02) is due tomorrow at 11:59 PM. Reply STOP to opt out.
 
 ## What it does
 
