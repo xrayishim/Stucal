@@ -19,7 +19,7 @@ function whenText(due, tz, now = new Date()) {
 
 function reminderText(a, tz, now) {
   const what = a.course ? `${a.title} (${a.course})` : a.title;
-  return `Stucal: ${what} is due ${whenText(new Date(a.due_at), tz, now)}. Reply STOP to opt out.`;
+  return `StuCal: ${what} is due ${whenText(new Date(a.due_at), tz, now)}. Reply STOP to opt out.`;
 }
 
 const findDue = db.prepare(`

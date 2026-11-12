@@ -66,7 +66,7 @@ test('signup, add assignment, get exactly one text', async (t) => {
   t.mock.method(console, 'log', (m) => logs.push(m));
   assert.equal(await sendDueReminders(), 1);
   assert.equal(await sendDueReminders(), 0); // never texts twice
-  assert.match(logs[0], /to \+15551234567: Stucal: Lab Report \(Chem 101\) is due (today|tomorrow) at/);
+  assert.match(logs[0], /to \+15551234567: StuCal: Lab Report \(Chem 101\) is due (today|tomorrow) at/);
 
   // checked off → no text
   db.prepare(`UPDATE assignments SET reminded_at = NULL, done = 1`).run();

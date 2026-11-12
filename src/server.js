@@ -54,7 +54,7 @@ app.post('/api/auth/start', async (req, res) => {
   db.prepare(`INSERT OR REPLACE INTO login_codes (phone, code, expires_at, attempts) VALUES (?, ?, ?, 0)`)
     .run(phone, code, Date.now() + 10 * 60e3);
   try {
-    await sms.sendSms(phone, `Your Stucal code is ${code}`);
+    await sms.sendSms(phone, `Your StuCal code is ${code}`);
   } catch (e) {
     console.error(e.message);
     return res.status(502).json({ error: 'Could not send text, try again' });
@@ -157,7 +157,7 @@ app.delete('/api/assignments/:id', auth, (req, res) => {
 // ---------- background jobs ----------
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
-  app.listen(port, () => console.log(`Stucal running on http://localhost:${port}${sms.live ? '' : '  (dev mode: texts print here)'}`));
+  app.listen(port, () => console.log(`StuCal running on http://localhost:${port}${sms.live ? '' : '  (dev mode: texts print here)'}`));
   setInterval(() => sendDueReminders().catch(console.error), 60e3);   // check every minute
   setInterval(() => calendar.syncAll().catch(console.error), 60 * 60e3); // re-pull calendars hourly
   sendDueReminders().catch(console.error);
