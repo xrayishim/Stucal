@@ -294,3 +294,14 @@ test('a very busy day is capped at 10 lines', () => {
   assert.equal(msg.match(/^- /gm).length, 10);
   assert.match(msg, /\+5 more on StuCal/);
 });
+
+test('class codes become subject names people recognize', () => {
+  const { friendlyCourse } = require('../src/subjects');
+  const cases = {
+    'MAC1105 MRG': 'Math', 'COP1000 MRG': 'Coding', 'ENC1101 MRG': 'English', 'POS2041 70715': 'Government',
+    'ENC1101 Lab Requirements': 'English Lab', 'BSC2010L': 'Biology Lab', 'AMH2010 01': 'History',
+    'HIST 1301-02': 'History', 'CS 101': 'Coding', 'CHM1045': 'Chemistry', 'PSY2012 Online': 'Psychology',
+    'AP US History - Period 3': 'AP US History - Period 3', 'Algebra': 'Algebra', 'XYZ1234': 'XYZ1234',
+  };
+  for (const [input, want] of Object.entries(cases)) assert.equal(friendlyCourse(input), want, input);
+});

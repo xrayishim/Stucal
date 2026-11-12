@@ -1,5 +1,6 @@
 const db = require('./db');
 const sms = require('./sms');
+const { friendlyCourse } = require('./subjects');
 
 const SUMMARY_HOUR = 18;      // Sunday summary goes out at 6 PM local time
 const SUMMARY_MAX_ITEMS = 12; // keep the text short enough to read (and cheap to send)
@@ -28,7 +29,8 @@ function whenText(due, tz, now = new Date()) {
 }
 
 function label(a) {
-  return a.course ? `${a.course}: ${a.title}` : a.title;
+  const course = friendlyCourse(a.course);
+  return course ? `${course}: ${a.title}` : a.title;
 }
 
 // Texts use plain characters only (no emoji, bullets or fancy dashes) so they're billed at the cheaper rate.
@@ -38,7 +40,8 @@ function reminderText(items, tz, now = new Date()) {
   if (!Array.isArray(items)) items = [items];
   if (items.length === 1) {
     const a = items[0];
-    const what = a.course ? `${a.title} (${a.course})` : a.title;
+    const course = friendlyCourse(a.course);
+    const what = course ? `${a.title} (${course})` : a.title;
     return `StuCal: ${what} is due ${whenText(new Date(a.due_at), tz, now)}. ${FOOTER}`;
   }
   const days = new Set(items.map((a) => dayText(new Date(a.due_at), tz, now)));

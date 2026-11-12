@@ -4,6 +4,7 @@ const path = require('node:path');
 const db = require('./db');
 const sms = require('./sms');
 const calendar = require('./calendar');
+const { friendlyCourse } = require('./subjects');
 const { sendDueReminders, sendWeeklySummaries, reminderText, summaryText } = require('./reminders');
 
 const fs = require('node:fs');
@@ -275,7 +276,7 @@ app.get('/api/assignments', auth, (req, res) => {
     SELECT id, title, course, due_at AS dueAt, source, done, reminded_at AS remindedAt
     FROM assignments WHERE user_id = ? AND due_at > ? ORDER BY due_at
   `).all(req.user.id, new Date(Date.now() - 3 * 864e5).toISOString());
-  res.json({ assignments: rows });
+  res.json({ assignments: rows.map((r) => ({ ...r, course: friendlyCourse(r.course) })) });
 });
 
 app.post('/api/assignments', auth, (req, res) => {
