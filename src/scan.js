@@ -5,10 +5,12 @@ const { zonedToUtc } = require('./calendar');
 const { friendlyCourse } = require('./subjects');
 
 // Models to try, in order. If one is overloaded, over its free limit, or retired,
-// StuCal moves on to the next. Flash-Lite goes first: it's fast, usually not busy,
-// and plenty for reading dates off a list. The "-latest" names follow Google's newest
-// versions; the numbered ones are backups. Set GEMINI_MODEL (comma-separated) to change the list.
-const DEFAULT_MODELS = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+// StuCal moves on to the next. Flash-Lite goes first: it's fast and plenty for reading
+// dates off a list. The numbered names are the ones Google currently recommends (Nov 2026);
+// the "-latest" names follow whatever is newest, as a backup when those get retired.
+// Set GEMINI_MODEL (comma-separated) to change the list without a code change.
+const DEFAULT_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest'];
+const RETRY_DELAY_MS = () => Number(process.env.SCAN_RETRY_DELAY_MS ?? 2500);
 const MODELS = () => (process.env.GEMINI_MODEL ? process.env.GEMINI_MODEL.split(',').map((m) => m.trim()).filter(Boolean) : DEFAULT_MODELS);
 // Keys pasted on a phone often pick up a hidden space or line break, which breaks the request.
 const apiKey = () => String(process.env.GEMINI_API_KEY || '').replace(/\s+/g, '');
@@ -94,10 +96,20 @@ async function askModel(model, imageBase64, mimeType, context) {
 
 async function askGemini(imageBase64, mimeType, context) {
   const problems = [];
+  const busy = [];
   for (const model of MODELS()) {
     const result = await askModel(model, imageBase64, mimeType, context);
     if (result.items) return result.items;
     problems.push(result.retry);
+    if (result.retry === 'busy') busy.push(model);
+  }
+  // "High demand" usually clears within seconds: wait a moment and give the busy ones one more try.
+  if (busy.length) {
+    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS()));
+    for (const model of busy.slice(0, 2)) {
+      const result = await askModel(model, imageBase64, mimeType, context);
+      if (result.items) return result.items;
+    }
   }
   if (problems.every((p) => p === 'limit')) throw new ScanError("StuCal's free AI limit is used up for now. Try again later.", 429);
   if (problems.every((p) => p === 'unreadable')) throw new ScanError("The AI couldn't read that screenshot. Try a clearer one.");

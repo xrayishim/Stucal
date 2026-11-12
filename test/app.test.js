@@ -482,7 +482,7 @@ test('screenshot import: AI reads it, past and duplicate items handled, nothing 
   const { found } = await r.json();
 
   // what was sent: the key in a header (not the URL), the picture, today's date and their classes
-  assert.match(sentToGemini.url, /models\/gemini-flash-lite-latest:generateContent$/);
+  assert.match(sentToGemini.url, /models\/gemini-3\.5-flash-lite:generateContent$/);
   assert.equal(sentToGemini.headers['x-goog-api-key'], 'test-key');
   const parts = sentToGemini.body.contents[0].parts;
   assert.equal(parts[0].inlineData.mimeType, 'image/jpeg');
@@ -595,15 +595,27 @@ test('screenshot import moves on to another model when one is overloaded or reti
   t.mock.method(globalThis, 'fetch', async (url) => {
     const model = String(url).match(/models\/([^:]+):/)[1];
     tried.push(model);
-    if (model === 'gemini-flash-lite-latest') return new Response(JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }), { status: 503 });
-    if (model === 'gemini-flash-latest') return new Response(JSON.stringify({ error: { message: 'models/x is not found' } }), { status: 404 });
+    if (model === 'gemini-3.5-flash-lite') return new Response(JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }), { status: 503 });
+    if (model === 'gemini-3.8-flash') return new Response(JSON.stringify({ error: { message: 'This model is no longer available to new users.' } }), { status: 404 });
     return new Response(JSON.stringify(ok));
   });
   const found = await scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' });
-  assert.deepEqual(tried, ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite']);
+  assert.deepEqual(tried, ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-lite-latest']);
   assert.equal(found[0].title, 'Section 4.4 HW');
 
-  // every model busy: a friendly "try again" message
+  // everything busy at first, but the first model recovers a moment later: the retry gets it
+  process.env.SCAN_RETRY_DELAY_MS = '0';
+  t.after(() => { delete process.env.SCAN_RETRY_DELAY_MS; });
+  tried.length = 0;
+  let calls = 0;
+  globalThis.fetch.mock.mockImplementation(async (url) => {
+    tried.push(String(url).match(/models\/([^:]+):/)[1]);
+    return ++calls <= 4 ? new Response('{}', { status: 503 }) : new Response(JSON.stringify(ok));
+  });
+  assert.equal((await scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' }))[0].title, 'Section 4.4 HW');
+  assert.deepEqual(tried, ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.5-flash-lite']);
+
+  // every model busy even after the retry: a friendly "try again" message
   globalThis.fetch.mock.mockImplementation(async () => new Response('{}', { status: 503 }));
   await assert.rejects(scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' }), /busy right now/);
   // a bad key stops right away instead of trying every model
