@@ -26,14 +26,13 @@ const findDue = db.prepare(`
   SELECT a.*, u.phone, u.timezone, u.remind_hours
   FROM assignments a JOIN users u ON u.id = a.user_id
   WHERE a.reminded_at IS NULL AND a.done = 0 AND a.due_at > ?
-    AND (u.plan = 'active' OR (u.plan = 'trial' AND u.trial_ends_at > ?))
 `);
 const markSent = db.prepare(`UPDATE assignments SET reminded_at = ? WHERE id = ?`);
 
 async function sendDueReminders(now = new Date()) {
   const nowIso = now.toISOString();
   let sent = 0;
-  for (const a of findDue.all(nowIso, nowIso)) {
+  for (const a of findDue.all(nowIso)) {
     const due = new Date(a.due_at).getTime();
     if (due - a.remind_hours * 3600e3 > now.getTime()) continue; // not yet
     markSent.run(nowIso, a.id); // mark first so a crash never double-texts

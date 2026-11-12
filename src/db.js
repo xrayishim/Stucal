@@ -13,9 +13,6 @@ db.exec(`
     timezone TEXT NOT NULL DEFAULT 'America/New_York',
     remind_hours INTEGER NOT NULL DEFAULT 24,   -- how far ahead to text
     calendar_url TEXT,                          -- Canvas/Blackboard/etc .ics feed
-    plan TEXT NOT NULL DEFAULT 'trial',         -- trial | active | canceled
-    trial_ends_at TEXT NOT NULL,
-    stripe_customer_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 

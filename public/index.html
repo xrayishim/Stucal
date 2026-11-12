@@ -28,8 +28,6 @@
   li.done b { text-decoration:line-through; color:var(--muted); }
   li .x { background:none; color:var(--muted); padding:4px 8px; font-weight:400; }
   .pill { display:inline-block; font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
-  .banner { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
-  .price { font-size:22px; font-weight:700; } .price small { font-size:14px; color:var(--muted); font-weight:400; }
   .hidden { display:none !important; }
   details summary { cursor:pointer; color:var(--muted); font-size:14px; }
 </style>
@@ -37,7 +35,7 @@
 <body>
 <main>
   <h1>Stucal</h1>
-  <p class="sub">Get a text before every assignment is due. $4.99/month.</p>
+  <p class="sub">Get a text before every Canvas assignment is due. Free.</p>
 
   <!-- login -->
   <section id="login" class="card hidden">
@@ -54,21 +52,42 @@
       <p class="hint" id="devHint"></p>
     </form>
     <div class="err" id="loginErr"></div>
-    <p class="hint">First 14 days free. No card needed to start.</p>
   </section>
 
   <!-- app -->
   <section id="app" class="hidden">
-    <div class="card banner" id="planCard"></div>
+    <div class="card">
+      <h2>Connect Canvas</h2>
+      <form id="settingsForm">
+        <label for="cal">Canvas calendar link</label>
+        <input id="cal" type="url" placeholder="https://yourschool.instructure.com/feeds/calendars/…ics">
+        <details class="mt"><summary>Where do I find this?</summary>
+          <p class="hint"><b>Canvas:</b> Calendar → "Calendar Feed" at the bottom right → copy the link.<br>
+          <b>Blackboard:</b> Calendar → gear icon → "Share calendar" → copy the iCal link.<br>
+          <b>Google Classroom:</b> open the class calendar in Google Calendar → Settings → "Secret address in iCal format".<br>
+          <b>Moodle:</b> Calendar → "Export calendar" → "Get calendar URL".</p>
+        </details>
+        <label for="remind" class="mt">Text me</label>
+        <select id="remind">
+          <option value="1">1 hour before</option>
+          <option value="3">3 hours before</option>
+          <option value="12">12 hours before</option>
+          <option value="24">1 day before</option>
+          <option value="48">2 days before</option>
+        </select>
+        <button class="mt">Save</button>
+        <div class="err" id="setErr"></div>
+      </form>
+    </div>
 
     <div class="card">
       <h2>Coming up</h2>
       <ul id="list"></ul>
-      <p class="hint" id="empty">Nothing yet. Add an assignment below or connect your school calendar.</p>
+      <p class="hint" id="empty">Nothing yet. Connect Canvas above and your assignments show up here.</p>
     </div>
 
     <div class="card">
-      <h2>Add an assignment</h2>
+      <h2>Add something Canvas doesn't have</h2>
       <form id="addForm">
         <label for="title">What is it?</label>
         <input id="title" placeholder="Lab report 3" required>
@@ -78,30 +97,6 @@
         </div>
         <button class="mt">Add</button>
         <div class="err" id="addErr"></div>
-      </form>
-    </div>
-
-    <div class="card">
-      <h2>Settings</h2>
-      <form id="settingsForm">
-        <label for="remind">Text me</label>
-        <select id="remind">
-          <option value="1">1 hour before</option>
-          <option value="3">3 hours before</option>
-          <option value="12">12 hours before</option>
-          <option value="24">1 day before</option>
-          <option value="48">2 days before</option>
-        </select>
-        <label for="cal">School calendar link (optional)</label>
-        <input id="cal" type="url" placeholder="https://yourschool.instructure.com/feeds/calendars/…ics">
-        <details class="mt"><summary>Where do I find this?</summary>
-          <p class="hint"><b>Canvas:</b> Calendar → "Calendar Feed" at the bottom right → copy the link.<br>
-          <b>Blackboard:</b> Calendar → gear icon → "Share calendar" → copy the iCal link.<br>
-          <b>Google Classroom:</b> open the class calendar in Google Calendar → Settings → "Secret address in iCal format".<br>
-          <b>Moodle:</b> Calendar → "Export calendar" → "Get calendar URL".</p>
-        </details>
-        <button class="mt">Save</button>
-        <div class="err" id="setErr"></div>
       </form>
     </div>
 
@@ -132,25 +127,6 @@ function fmtDue(iso) {
   return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + `, ${time}`;
 }
 
-function renderPlan() {
-  const c = $('planCard');
-  if (me.plan === 'active') {
-    c.innerHTML = `<div><b>You're subscribed</b><div class="hint">Reminders go to ${me.phone}</div></div>` +
-      (me.billingEnabled ? `<button class="ghost" id="manage">Manage</button>` : '');
-  } else {
-    const left = Math.ceil((new Date(me.trialEndsAt) - Date.now()) / 864e5);
-    const status = me.remindersOn ? `Free trial: ${left} day${left === 1 ? '' : 's'} left` : 'Reminders are paused';
-    c.innerHTML = `<div><b>${status}</b><div class="price">$4.99 <small>/ month</small></div></div>
-      <button id="subscribe">Subscribe</button>`;
-  }
-  $('subscribe')?.addEventListener('click', () => go('/api/billing/checkout'));
-  $('manage')?.addEventListener('click', () => go('/api/billing/portal'));
-}
-
-async function go(path) {
-  try { location.href = (await api(path, { method: 'POST' })).url; } catch (e) { alert(e.message); }
-}
-
 async function loadList() {
   const { assignments } = await api('/api/assignments');
   $('empty').classList.toggle('hidden', assignments.length > 0);
@@ -171,7 +147,6 @@ async function loadList() {
 function showApp() {
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
-  renderPlan();
   $('remind').value = String(me.remindHours);
   if (!$('remind').value) $('remind').value = '24';
   $('cal').value = me.calendarUrl || '';

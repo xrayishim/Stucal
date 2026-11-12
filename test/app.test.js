@@ -56,7 +56,6 @@ test('signup, add assignment, get exactly one text', async (t) => {
   const res = await post('/api/auth/verify', { phone: '5551234567', code, timezone: 'America/New_York' });
   assert.equal(res.status, 200);
   const cookie = res.headers.get('set-cookie').split(';')[0];
-  assert.equal((await res.json()).user.remindersOn, true); // trial
 
   const due = new Date(Date.now() + 20 * 3600e3); // inside the default 24h window
   const later = new Date(Date.now() + 72 * 3600e3); // outside it
@@ -69,9 +68,8 @@ test('signup, add assignment, get exactly one text', async (t) => {
   assert.equal(await sendDueReminders(), 0); // never texts twice
   assert.match(logs[0], /to \+15551234567: Stucal: Lab Report \(Chem 101\) is due (today|tomorrow) at/);
 
-  // expired trial, not subscribed → no texts
-  db.prepare(`UPDATE users SET trial_ends_at = '2000-01-01'`).run();
-  db.prepare(`UPDATE assignments SET reminded_at = NULL`).run();
+  // checked off → no text
+  db.prepare(`UPDATE assignments SET reminded_at = NULL, done = 1`).run();
   assert.equal(await sendDueReminders(), 0);
 
   const unauth = await fetch(base + '/api/assignments');

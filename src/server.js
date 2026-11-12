@@ -3,17 +3,10 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const db = require('./db');
 const sms = require('./sms');
-const billing = require('./billing');
 const calendar = require('./calendar');
 const { sendDueReminders } = require('./reminders');
 
-const TRIAL_DAYS = 14;
 const app = express();
-
-// Stripe needs the raw body to verify its signature, so this route comes before express.json().
-app.post('/api/billing/webhook', express.text({ type: '*/*' }), (req, res) => {
-  res.sendStatus(billing.handleWebhook(req.body, req.get('stripe-signature')) ? 200 : 400);
-});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -45,16 +38,11 @@ function auth(req, res, next) {
 }
 
 function publicUser(u) {
-  const trialActive = u.plan === 'trial' && u.trial_ends_at > new Date().toISOString();
   return {
     phone: u.phone,
     timezone: u.timezone,
     remindHours: u.remind_hours,
     calendarUrl: u.calendar_url,
-    plan: u.plan,
-    trialEndsAt: u.trial_ends_at,
-    remindersOn: u.plan === 'active' || trialActive,
-    billingEnabled: billing.enabled,
   };
 }
 
@@ -87,8 +75,7 @@ app.post('/api/auth/verify', (req, res) => {
   let user = db.prepare(`SELECT * FROM users WHERE phone = ?`).get(phone);
   if (!user) {
     const tz = validTimezone(req.body.timezone) ? req.body.timezone : 'America/New_York';
-    const trialEnds = new Date(Date.now() + TRIAL_DAYS * 864e5).toISOString();
-    db.prepare(`INSERT INTO users (phone, timezone, trial_ends_at) VALUES (?, ?, ?)`).run(phone, tz, trialEnds);
+    db.prepare(`INSERT INTO users (phone, timezone) VALUES (?, ?)`).run(phone, tz);
     user = db.prepare(`SELECT * FROM users WHERE phone = ?`).get(phone);
   }
   const token = crypto.randomBytes(32).toString('hex');
@@ -165,17 +152,6 @@ app.patch('/api/assignments/:id', auth, (req, res) => {
 app.delete('/api/assignments/:id', auth, (req, res) => {
   db.prepare(`DELETE FROM assignments WHERE id = ? AND user_id = ?`).run(req.params.id, req.user.id);
   res.json({ ok: true });
-});
-
-// ---------- billing ----------
-app.post('/api/billing/checkout', auth, async (req, res) => {
-  if (!billing.enabled) return res.status(503).json({ error: 'Payments are not set up yet' });
-  try { res.json({ url: await billing.createCheckout(req.user) }); } catch (e) { res.status(502).json({ error: e.message }); }
-});
-
-app.post('/api/billing/portal', auth, async (req, res) => {
-  if (!billing.enabled || !req.user.stripe_customer_id) return res.status(400).json({ error: 'No subscription found' });
-  try { res.json({ url: await billing.createPortal(req.user) }); } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
 // ---------- background jobs ----------

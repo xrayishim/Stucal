@@ -93,7 +93,7 @@ async function syncUser(user) {
 }
 
 async function syncAll() {
-  const users = db.prepare(`SELECT * FROM users WHERE calendar_url IS NOT NULL AND plan != 'canceled'`).all();
+  const users = db.prepare(`SELECT * FROM users WHERE calendar_url IS NOT NULL`).all();
   for (const u of users) {
     try { await syncUser(u); } catch (e) { console.error(`calendar sync failed for user ${u.id}:`, e.message); }
   }
