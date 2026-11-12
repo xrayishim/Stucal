@@ -158,6 +158,16 @@
   ul.review .t input { margin: 0 0 6px; padding: 9px 11px; font-size: 15px; }
   ul.review .t small { display: block; font-size: 13px; color: var(--muted); }
   ul.review li.off .t { opacity: .45; }
+  details.fold > summary { color: var(--text); font-size: inherit; margin-top: 0; list-style: none; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  .fold-title { font-size: 19px; letter-spacing: -0.01em; }
+  .fold-title .count { font-size: 14px; font-weight: 500; color: var(--muted); }
+  .fold-next { grid-column: 1; font-size: 14px; color: var(--muted); }
+  details.fold .chev { grid-column: 2; grid-row: 1 / span 2; width: 22px; height: 22px; color: var(--muted); transition: transform .2s; }
+  details.fold[open] .chev { transform: rotate(180deg); }
+  details.fold[open] .fold-next { display: none; }
+  details.fold[open] > summary { margin-bottom: 12px; }
+  details.fold.empty { display: none; }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
   ul.list li:first-child { border-top: 0; padding-top: 4px; }
@@ -354,8 +364,14 @@
   </div>
 
   <div class="card">
-    <h2>Coming up</h2>
-    <ul class="list" id="list"></ul>
+    <details id="upcoming" class="fold">
+      <summary>
+        <span class="fold-title"><b>Coming up</b> <span class="count" id="upCount"></span></span>
+        <span class="fold-next" id="upNext"></span>
+        <svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </summary>
+      <ul class="list" id="list"></ul>
+    </details>
     <p class="hint" id="empty">Nothing yet. Connect Canvas above and your assignments show up here.</p>
   </div>
 
@@ -547,6 +563,10 @@ function fmtDue(iso) {
 async function loadList() {
   const { assignments } = await api('/api/assignments');
   $('empty').classList.toggle('hidden', assignments.length > 0);
+  $('upcoming').classList.toggle('empty', !assignments.length);
+  const left = assignments.filter((a) => !a.done);
+  $('upCount').textContent = `· ${left.length} to do`;
+  $('upNext').textContent = left.length ? `Next: ${left[0].title}${left[0].course ? ` (${left[0].course})` : ''}, ${fmtDue(left[0].dueAt)}` : 'All caught up!';
   $('list').innerHTML = '';
   for (const a of assignments) {
     const li = document.createElement('li');
