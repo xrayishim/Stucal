@@ -2,7 +2,7 @@
 
 StuCal texts students before their Canvas assignments are due. It's free.
 
-> **StuCal:** Lab Report 3 (CHEM-101-02) is due tomorrow at 11:59 PM. Reply STOP to opt out.
+> StuCal: Lab Report 3 (CHEM-101-02) is due tomorrow at 11:59 PM. Reply STOP to opt out.
 
 ## What it does
 
@@ -29,8 +29,21 @@ You need Node 22.13 or newer. Without Twilio keys, every text, including the log
 
 ## Going live
 
-1. **Twilio** (sending texts): buy a phone number and fill in the `TWILIO_*` values in `.env.example`. US numbers must complete A2P 10DLC registration before carriers deliver the texts. Plan for about 1–2 weeks of approval and a small one-time fee. Twilio handles STOP and opt-outs automatically.
-2. **Hosting:** use any always-on Node host, such as Railway, Render or Fly.io. The app needs a persistent disk for the SQLite file (`DB_PATH`). Set `NODE_ENV=production`.
+1. **Twilio** (sending texts): buy a phone number and fill in the `TWILIO_*` values in `.env.example`.
+   - In the Twilio console, set the number's **"A message comes in"** webhook to `https://YOUR-DOMAIN/api/sms/incoming` (HTTP POST). That's how StuCal learns when someone texts STOP or START.
+   - Under **Messaging → Settings → Geo permissions**, allow only the United States and Canada. This is a second layer of protection against SMS fraud.
+   - Register for **A2P 10DLC** (required for US texting; about 1–2 weeks). The form asks for your opt-in wording and Privacy/Terms links, which are already on the site: the consent line under the phone box, `/privacy` and `/terms`.
+2. **Hosting:** use any always-on Node host, such as Railway, Render or Fly.io. The app needs a persistent disk for the SQLite file (`DB_PATH`). Set `NODE_ENV=production`, `APP_URL` (your public address) and `CONTACT_EMAIL` (shown on the Privacy and Terms pages).
+
+### Built-in protections
+
+- **Login codes are limited:** 1 per minute and 5 per hour per number, 10 per hour per visitor, and an app-wide cap (`MAX_CODES_PER_HOUR`, default 300). Only US/Canada mobile numbers are accepted; Caribbean +1 and toll-free numbers are rejected.
+- **STOP is respected:** people who text STOP get no more reminders, and StuCal doesn't keep retrying them. START turns texts back on.
+- **Other replies** get one auto-answer per day at most, so nobody can run up your bill by texting the number.
+- **Texts use plain characters only** (no emoji or fancy punctuation), which keeps long texts at the cheaper billing rate.
+- **Students can delete their account** from the bottom of their dashboard.
+
+The Privacy Policy and Terms are a solid starting point written for this app, but they aren't legal advice. Have someone check them if StuCal grows.
 
 Running costs are roughly $0.20–0.30 per student per month in texts, plus about $1–2/month for the Twilio number and about $5/month for hosting.
 

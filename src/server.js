@@ -6,19 +6,66 @@ const sms = require('./sms');
 const calendar = require('./calendar');
 const { sendDueReminders, sendWeeklySummaries } = require('./reminders');
 
+const fs = require('node:fs');
+
+const PUBLIC = path.join(__dirname, '..', 'public');
+const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+const CONTACT_EMAIL = process.env.CONTACT_EMAIL || '';
+const MAX_CODES_PER_HOUR = Number(process.env.MAX_CODES_PER_HOUR) || 300; // whole-app safety cap
+
 const app = express();
+// Railway, Render, Fly etc. sit behind one proxy; trust it so req.ip is the student's real IP.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Privacy and Terms pages get the contact email and app address filled in.
+function legalPage(file) {
+  return (req, res) => {
+    const html = fs.readFileSync(path.join(PUBLIC, file), 'utf8')
+      .replaceAll('{{CONTACT_EMAIL}}', CONTACT_EMAIL || '(contact email not set yet)')
+      .replaceAll('{{APP_URL}}', APP_URL);
+    res.type('html').send(html);
+  };
+}
+app.get(['/privacy', '/privacy.html'], legalPage('privacy.html'));
+app.get(['/terms', '/terms.html'], legalPage('terms.html'));
+app.use(express.static(PUBLIC));
 
 // ---------- helpers ----------
+
+// Caribbean countries share the +1 code but are billed as (expensive) international texts,
+// which is exactly what SMS-fraud bots target. Toll-free numbers can't receive our texts.
+const BLOCKED_AREA_CODES = new Set([
+  '242', '246', '264', '268', '284', '345', '441', '473', '649', '658', '664', '721', '758', '767',
+  '784', '809', '829', '849', '868', '869', '876',
+  '800', '833', '844', '855', '866', '877', '888', '900',
+]);
+
+// US and Canada mobile numbers only.
 function normalizePhone(input) {
-  const digits = String(input || '').replace(/\D/g, '');
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  if (String(input).trim().startsWith('+') && digits.length >= 8 && digits.length <= 15) return `+${digits}`;
-  return null;
+  let digits = String(input || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  if (!/^[2-9]\d{2}[2-9]\d{6}$/.test(digits)) return null;
+  if (BLOCKED_AREA_CODES.has(digits.slice(0, 3))) return null;
+  return `+1${digits}`;
 }
+
+// ---------- rate limits ----------
+const countEvents = db.prepare(`SELECT COUNT(*) AS n FROM rate_events WHERE key = ? AND at > ?`);
+const addEvent = db.prepare(`INSERT INTO rate_events (key, at) VALUES (?, ?)`);
+
+// rules: [[key, windowMs, max], ...]. Records the event only if every rule allows it.
+function allow(rules) {
+  const now = Date.now();
+  for (const [key, windowMs, max] of rules) {
+    if (countEvents.get(key, now - windowMs).n >= max) return { ok: false, key };
+  }
+  for (const key of new Set(rules.map((r) => r[0]))) addEvent.run(key, now);
+  return { ok: true };
+}
+
+const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
 
 function validTimezone(tz) {
   try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
@@ -50,15 +97,33 @@ function publicUser(u) {
 // ---------- login by texted code ----------
 app.post('/api/auth/start', async (req, res) => {
   const phone = normalizePhone(req.body.phone);
-  if (!phone) return res.status(400).json({ error: 'Enter a valid phone number' });
+  if (!phone) return res.status(400).json({ error: 'Enter a US or Canadian mobile number' });
+
+  const limit = allow([
+    [`phone:${phone}`, MIN, 1],
+    [`phone:${phone}`, HOUR, 5],
+    [`phone:${phone}`, DAY, 10],
+    [`ip:${req.ip}`, HOUR, 10],
+    [`ip:${req.ip}`, DAY, 30],
+    ['all', HOUR, MAX_CODES_PER_HOUR],
+  ]);
+  if (!limit.ok) {
+    if (limit.key === 'all') console.error(`ALERT: login code cap (${MAX_CODES_PER_HOUR}/hour) reached, possible SMS fraud`);
+    const wait = limit.key === `phone:${phone}` && countEvents.get(limit.key, Date.now() - HOUR).n < 5 ? 'a minute' : 'a while';
+    return res.status(429).json({ error: `Too many codes requested. Try again in ${wait}.` });
+  }
+
   const code = String(crypto.randomInt(100000, 1000000));
   db.prepare(`INSERT OR REPLACE INTO login_codes (phone, code, expires_at, attempts) VALUES (?, ?, ?, 0)`)
-    .run(phone, code, Date.now() + 10 * 60e3);
+    .run(phone, code, Date.now() + 10 * MIN);
   try {
     await sms.sendSms(phone, `Your StuCal code is ${code}`);
   } catch (e) {
+    if (e.optedOut) {
+      return res.status(400).json({ error: `This number texted STOP to StuCal. Text START to ${process.env.TWILIO_FROM || 'our number'} to turn texts back on, then try again.` });
+    }
     console.error(e.message);
-    return res.status(502).json({ error: 'Could not send text, try again' });
+    return res.status(502).json({ error: 'Could not send a text to that number. Check it and try again.' });
   }
   res.json({ ok: true, devMode: !sms.live });
 });
@@ -78,6 +143,12 @@ app.post('/api/auth/verify', (req, res) => {
     const tz = validTimezone(req.body.timezone) ? req.body.timezone : 'America/New_York';
     db.prepare(`INSERT INTO users (phone, timezone) VALUES (?, ?)`).run(phone, tz);
     user = db.prepare(`SELECT * FROM users WHERE phone = ?`).get(phone);
+    // Carriers expect a confirmation text when someone signs up.
+    sms.sendSms(phone, 'StuCal: You\'re signed up for assignment reminders. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.')
+      .catch((e) => console.error('welcome text failed:', e.message));
+  } else if (user.opted_out) {
+    // They just got a login code, so texts are getting through again.
+    db.prepare(`UPDATE users SET opted_out = 0 WHERE id = ?`).run(user.id);
   }
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare(`INSERT INTO sessions (token, user_id) VALUES (?, ?)`).run(token, user.id);
@@ -122,6 +193,49 @@ app.patch('/api/me', auth, async (req, res) => {
   res.json({ user: publicUser(user), imported });
 });
 
+app.delete('/api/me', auth, (req, res) => {
+  // Assignments and sessions are removed with the user (ON DELETE CASCADE).
+  db.prepare(`DELETE FROM users WHERE id = ?`).run(req.user.id);
+  db.prepare(`DELETE FROM login_codes WHERE phone = ?`).run(req.user.phone);
+  res.setHeader('Set-Cookie', 'stucal_session=; Path=/; Max-Age=0');
+  res.json({ ok: true });
+});
+
+// ---------- incoming texts (Twilio webhook) ----------
+// Twilio itself answers STOP / START / HELP and blocks texts to people who opted out.
+// This keeps our records in step so we stop trying to text them.
+const STOP_WORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'OPTOUT', 'REVOKE']);
+const START_WORDS = new Set(['START', 'UNSTOP', 'YES']);
+const HELP_WORDS = new Set(['HELP', 'INFO']);
+
+function twiml(message) {
+  const esc = (s) => s.replace(/[<>&'"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  return `<?xml version="1.0" encoding="UTF-8"?><Response>${message ? `<Message>${esc(message)}</Message>` : ''}</Response>`;
+}
+
+app.post('/api/sms/incoming', express.urlencoded({ extended: false }), (req, res) => {
+  if (sms.live && !sms.verifyTwilioRequest(`${APP_URL}/api/sms/incoming`, req.body, req.get('x-twilio-signature'))) {
+    return res.sendStatus(403);
+  }
+  const from = normalizePhone(req.body.From);
+  const word = String(req.body.OptOutType || req.body.Body || '').trim().toUpperCase();
+  res.type('text/xml');
+
+  if (STOP_WORDS.has(word)) {
+    if (from) db.prepare(`UPDATE users SET opted_out = 1 WHERE phone = ?`).run(from);
+    return res.send(twiml());
+  }
+  if (START_WORDS.has(word)) {
+    if (from) db.prepare(`UPDATE users SET opted_out = 0 WHERE phone = ?`).run(from);
+    return res.send(twiml());
+  }
+  if (HELP_WORDS.has(word)) return res.send(twiml());
+
+  // Anything else: we can't read replies yet. Answer at most once a day per number so nobody can run up our bill.
+  const ok = from && allow([[`reply:${from}`, DAY, 1]]).ok;
+  res.send(twiml(ok ? `StuCal can't read replies yet. Manage your reminders at ${APP_URL}` : ''));
+});
+
 app.post('/api/calendar/sync', auth, async (req, res) => {
   try { res.json({ imported: await calendar.syncUser(req.user) }); } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -162,9 +276,18 @@ app.delete('/api/assignments/:id', auth, (req, res) => {
 if (require.main === module) {
   const port = Number(process.env.PORT) || 3000;
   app.listen(port, () => console.log(`StuCal running on http://localhost:${port}${sms.live ? '' : '  (dev mode: texts print here)'}`));
+  if (process.env.NODE_ENV === 'production') {
+    if (!CONTACT_EMAIL) console.warn('WARNING: set CONTACT_EMAIL so the Privacy and Terms pages show how to reach you.');
+    if (!process.env.APP_URL) console.warn('WARNING: set APP_URL to your public address (needed for the Twilio webhook).');
+  }
+  let running = false;
   const tick = async () => {
+    if (running) return; // a slow minute shouldn't overlap the next one
+    running = true;
     await sendDueReminders().catch(console.error);     // day-before reminders
     await sendWeeklySummaries().catch(console.error);  // Sunday 6 PM "your week ahead"
+    db.prepare(`DELETE FROM rate_events WHERE at < ?`).run(Date.now() - 2 * DAY);
+    running = false;
   };
   setInterval(tick, 60e3);                                              // check every minute
   setInterval(() => calendar.syncAll().catch(console.error), 60 * 60e3); // re-pull calendars hourly

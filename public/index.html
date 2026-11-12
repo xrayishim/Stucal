@@ -122,6 +122,11 @@
   .mt { margin-top: 18px; }
   .err { color: var(--danger); font-size: 14px; min-height: 20px; margin-top: 10px; }
   .hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+  .consent { font-size: 12.5px; line-height: 1.5; color: var(--muted); margin: 14px 0 0; }
+  .consent a, footer a { color: var(--muted); }
+  .consent a:hover, footer a:hover { color: var(--text); }
+  .btn.danger { background: transparent; color: var(--danger); border: 1px solid rgba(255,138,101,.4); }
+  .btn.danger:hover { background: rgba(255,138,101,.08); }
   .back { background: none; border: 0; color: var(--muted); padding: 0; margin-bottom: 18px; font-size: 15px; }
   .back:hover { color: var(--text); }
   details summary { cursor: pointer; color: var(--blue-hi); font-size: 14px; margin-top: 10px; }
@@ -175,9 +180,8 @@
       </div>
       <div class="thread">
         <div class="bubble in">
-          <p>Hey! 📚 You have 2 assignments due tomorrow:</p>
-          <p>📐 Algebra — Chapter 5 HW</p>
-          <p>🧪 Chemistry — Lab Report</p>
+          <p>StuCal: You have 2 assignments due tomorrow:</p>
+          <p>- Algebra: Chapter 5 HW (5:00 PM)<br>- Chemistry: Lab Report (11:59 PM)</p>
         </div>
         <div class="soon-row">Coming soon</div>
         <div class="bubble out">what about next week?</div>
@@ -231,7 +235,7 @@
   </section>
 
   <footer>
-    <div class="wrap"><span>© 2026 StuCal</span><span>Free while in beta</span></div>
+    <div class="wrap"><span>© 2026 StuCal · Free while in beta</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span></div>
   </footer>
 </main>
 
@@ -243,8 +247,9 @@
     <p class="hint" style="margin-bottom:6px">New or returning, just enter your number.</p>
     <form id="phoneForm">
       <label for="phone">Phone number</label>
-      <input id="phone" type="tel" autocomplete="tel" placeholder="(555) 123-4567" required>
+      <input id="phone" type="tel" autocomplete="tel" placeholder="(202) 555-0123" required>
       <button class="btn block mt">Text me a code</button>
+      <p class="consent">By tapping "Text me a code," you agree to get recurring automated texts from StuCal (login codes, assignment reminders and a weekly summary). Msg frequency varies. Msg &amp; data rates may apply. Reply STOP to cancel, HELP for help. See our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
     </form>
     <form id="codeForm" class="hidden">
       <label for="code">6-digit code</label>
@@ -302,6 +307,13 @@
       <div class="err" id="addErr"></div>
     </form>
   </div>
+
+  <div class="card">
+    <h2>Your account</h2>
+    <p class="hint" style="margin:0 0 14px">Deleting your account erases your phone number, settings and assignments right away. It can't be undone.</p>
+    <button class="btn danger" id="deleteBtn">Delete my account</button>
+  </div>
+  <p class="hint" style="text-align:center"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
 </main>
 
 <script>
@@ -412,6 +424,12 @@ $('settingsForm').onsubmit = async (e) => {
     $('setErr').textContent = r.imported !== undefined ? `Saved. Imported ${r.imported} assignment${r.imported === 1 ? '' : 's'}.` : 'Saved.';
     loadList();
   } catch (err) { $('setErr').style.color = ''; $('setErr').textContent = err.message; }
+};
+
+$('deleteBtn').onclick = async () => {
+  if (!confirm('Delete your StuCal account? Your reminders will stop and your assignments will be erased.')) return;
+  try { await api('/api/me', { method: 'DELETE' }); me = null; alert('Your account was deleted.'); show('home'); }
+  catch (err) { alert(err.message); }
 };
 
 api('/api/me').then((r) => { me = r.user; show('app'); }).catch(() => show('home'));
