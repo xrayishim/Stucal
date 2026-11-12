@@ -20,7 +20,7 @@ StuCal reminds students before their Canvas assignments are due, by phone notifi
 
 ### Finding your Canvas calendar link
 
-In Canvas, open **Calendar**, then click **Calendar Feed** at the bottom right and copy the link.
+In the **Canvas app**: tap the three lines **☰** at the top left → **Settings** → **Subscribe to Calendar**, and copy that link. (On the Canvas website: **Calendar** → **Calendar Feed** at the bottom right.) StuCal's Connect Canvas box has a button that opens the Canvas app and a **Paste my link** button.
 
 ## Run it locally (no accounts needed)
 

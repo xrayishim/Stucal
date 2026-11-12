@@ -267,7 +267,7 @@
     <ol class="steps">
       <li data-sms><div><b>Sign up with your phone number</b><span>We text you a code. No password.</span></div></li>
       <li data-push><div><b>Add StuCal to your Home Screen</b><span>On iPhone: tap Share, then "Add to Home Screen." No app store, no password.</span></div></li>
-      <li><div><b>Paste your Canvas calendar link</b><span>Canvas → Calendar → Calendar Feed. Your assignments show up right away.</span></div></li>
+      <li><div><b>Paste your Canvas calendar link</b><span>In the Canvas app: ☰ → Settings → Subscribe to Calendar. Copy the link and paste it into StuCal. Your assignments show up right away.</span></div></li>
       <li><div><b>Get your reminders</b><span><span data-sms>Your week ahead every Sunday night, then a reminder the day before each thing is due. Reply STOP anytime.</span><span data-push>A notification at the time you pick, from 1 hour to 2 days before things are due.</span></span></div></li>
     </ol>
   </section>
@@ -357,9 +357,9 @@
         <input id="schoolHost" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="yourschool.instructure.com">
       </div>
       <ol class="howto">
-        <li><div><a class="btn sm" id="openCanvas" target="_blank" rel="noopener">Open my Canvas calendar</a><br><span class="hint">Log in if Canvas asks.</span></div></li>
-        <li><div>Scroll to the bottom and tap <b>Calendar Feed</b>.<br><span class="hint">Don't see it? Tap <b>aA</b> → <b>Request Desktop Website</b>. (If it opened in a small window, tap the <b>compass</b> to open it in Safari first.)</span></div></li>
-        <li><div>Press and hold the link that ends in <b>.ics</b> → <b>Copy</b>.</div></li>
+        <li><div><a class="btn sm" id="openCanvas" target="_blank" rel="noopener">Open the Canvas app</a><br><span class="hint">Don't have it? Get <b>Canvas Student</b> from the App Store.</span></div></li>
+        <li><div>Tap the <b>three lines ☰</b> at the top left, then tap <b>Settings</b>.</div></li>
+        <li><div>Tap <b>Subscribe to Calendar</b>, then copy that link.</div></li>
         <li><div>Come back to StuCal and tap:<br><button class="btn sm mt" id="pasteCal" type="button">Paste my link</button></div></li>
       </ol>
       <p class="hint" id="pasteMsg"></p>
@@ -369,7 +369,8 @@
       <label for="cal" id="calLabel">Or paste it here</label>
       <input id="cal" type="url" placeholder="https://yourschool.instructure.com/feeds/calendars/…ics">
       <details><summary>Where do I find this?</summary>
-        <p class="hint"><b>Canvas:</b> Calendar → "Calendar Feed" at the bottom right → copy the link.<br>
+        <p class="hint"><b>Canvas app:</b> tap ☰ (top left) → Settings → Subscribe to Calendar → copy the link.<br>
+        <b>Canvas website:</b> Calendar → "Calendar Feed" at the bottom right → copy the link.<br>
         <b>Blackboard:</b> Calendar → gear icon → "Share calendar" → copy the iCal link.<br>
         <b>Google Classroom:</b> open the class calendar in Google Calendar → Settings → "Secret address in iCal format".<br>
         <b>Moodle:</b> Calendar → "Export calendar" → "Get calendar URL".</p>
@@ -531,10 +532,10 @@ $('pasteCal').onclick = async () => {
   let text = '';
   try { text = (await navigator.clipboard.readText()).trim(); }
   catch { $('pasteMsg').textContent = 'Press and hold in the box below, tap Paste, then Save.'; $('cal').focus(); return; }
-  if (!text) { $('pasteMsg').textContent = "Nothing's copied yet. Copy the Calendar Feed link in Canvas first."; return; }
+  if (!text) { $('pasteMsg').textContent = "Nothing's copied yet. In the Canvas app, go to ☰ → Settings → Subscribe to Calendar and copy the link first."; return; }
   if (!looksLikeFeed(text)) {
     $('pasteMsg').style.color = 'var(--danger)';
-    $('pasteMsg').textContent = "That's not the calendar link. In Canvas, tap Calendar Feed and copy the link that ends in .ics.";
+    $('pasteMsg').textContent = "That's not the calendar link. In the Canvas app, go to ☰ → Settings → Subscribe to Calendar and copy that link.";
     return;
   }
   $('cal').value = text;
