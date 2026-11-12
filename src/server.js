@@ -22,6 +22,17 @@ const app = express();
 // Railway, Render, Fly etc. sit behind one proxy; trust it so req.ip is the student's real IP.
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 
+// StuCal also answers on Render's own address (something.onrender.com). On iPhones that would be a
+// separate app with a separate account, so send anyone who lands there to the real address instead.
+app.use((req, res, next) => {
+  const appUrl = process.env.APP_URL || '';
+  if (process.env.NODE_ENV !== 'production' || !appUrl.startsWith('https://')) return next();
+  const host = String(req.headers.host || '').toLowerCase();
+  if (!host.endsWith('.onrender.com') || host === new URL(appUrl).host) return next();
+  // 301 for normal page visits; 308 keeps POSTs (forms, the Twilio webhook) working.
+  res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, appUrl.replace(/\/$/, '') + req.originalUrl);
+});
+
 // Screenshots are bigger than normal requests, so that one route gets a higher size limit.
 const smallJson = express.json();
 const imageJson = express.json({ limit: '8mb' });

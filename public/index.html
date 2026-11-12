@@ -168,6 +168,10 @@
   details.fold[open] .fold-next { display: none; }
   details.fold[open] > summary { margin-bottom: 12px; }
   details.fold.empty { display: none; }
+  .helper { background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 4px 0 6px; }
+  .helper .howto { margin-top: 14px; }
+  .helper .howto .hint { margin: 4px 0 0; display: inline-block; }
+  .helper a.btn { text-decoration: none; }
   ul.list { list-style: none; margin: 0; padding: 0; }
   ul.list li { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
   ul.list li:first-child { border-top: 0; padding-top: 4px; }
@@ -340,8 +344,29 @@
 
   <div class="card">
     <h2>Connect Canvas</h2>
+    <p class="status on hidden" id="calOk"><span class="dotc"></span>Connected</p>
+
+    <div id="calHelper" class="helper">
+      <label for="school" style="margin-top:0">Your school</label>
+      <select id="school">
+        <option value="online.seminolestate.edu">Seminole State College</option>
+        <option value="other">Another school</option>
+      </select>
+      <div id="otherSchool" class="hidden">
+        <label for="schoolHost">Your school's Canvas address</label>
+        <input id="schoolHost" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="yourschool.instructure.com">
+      </div>
+      <ol class="howto">
+        <li><div><a class="btn sm" id="openCanvas" target="_blank" rel="noopener">Open my Canvas calendar</a><br><span class="hint">Log in if Canvas asks.</span></div></li>
+        <li><div>Scroll to the bottom and tap <b>Calendar Feed</b>.<br><span class="hint">Don't see it? Tap <b>aA</b> → <b>Request Desktop Website</b>. (If it opened in a small window, tap the <b>compass</b> to open it in Safari first.)</span></div></li>
+        <li><div>Press and hold the link that ends in <b>.ics</b> → <b>Copy</b>.</div></li>
+        <li><div>Come back to StuCal and tap:<br><button class="btn sm mt" id="pasteCal" type="button">Paste my link</button></div></li>
+      </ol>
+      <p class="hint" id="pasteMsg"></p>
+    </div>
+
     <form id="settingsForm">
-      <label for="cal">Canvas calendar link</label>
+      <label for="cal" id="calLabel">Or paste it here</label>
       <input id="cal" type="url" placeholder="https://yourschool.instructure.com/feeds/calendars/…ics">
       <details><summary>Where do I find this?</summary>
         <p class="hint"><b>Canvas:</b> Calendar → "Calendar Feed" at the bottom right → copy the link.<br>
@@ -459,6 +484,64 @@ document.addEventListener('click', async (e) => {
 });
 
 // ---------- dashboard ----------
+// ---------- Canvas link helper ----------
+function savedSchool() { try { return JSON.parse(localStorage.getItem('stucal.school') || 'null'); } catch { return null; } }
+function saveSchool(v) { try { localStorage.setItem('stucal.school', JSON.stringify(v)); } catch {} }
+
+function schoolHost() {
+  if ($('school').value !== 'other') return $('school').value;
+  return $('schoolHost').value.trim().replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
+}
+
+function updateCanvasLink() {
+  const other = $('school').value === 'other';
+  $('otherSchool').classList.toggle('hidden', !other);
+  const host = schoolHost();
+  const ok = /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host);
+  $('openCanvas').href = ok ? `https://${host}/calendar` : '#';
+  $('openCanvas').classList.toggle('disabled', !ok);
+  $('openCanvas').style.opacity = ok ? '' : '.5';
+  saveSchool({ choice: $('school').value, host: $('schoolHost').value });
+}
+
+function initCanvasHelper() {
+  const saved = savedSchool();
+  // If they already connected a calendar, preselect that school.
+  const linked = me && me.calendarUrl ? (me.calendarUrl.match(/^[a-z]+:\/\/([^/]+)/i) || [])[1] : null;
+  const host = linked || (saved && (saved.choice === 'other' ? saved.host : saved.choice));
+  if (host && [...$('school').options].some((o) => o.value === host)) $('school').value = host;
+  else if (host) { $('school').value = 'other'; $('schoolHost').value = host; }
+  updateCanvasLink();
+  const connected = Boolean(me && me.calendarUrl);
+  $('calOk').classList.toggle('hidden', !connected);
+  $('calHelper').classList.toggle('hidden', connected);
+  $('calLabel').textContent = connected ? 'Canvas calendar link' : 'Or paste it here';
+}
+
+$('school').onchange = updateCanvasLink;
+$('schoolHost').oninput = updateCanvasLink;
+$('openCanvas').onclick = (e) => {
+  if ($('openCanvas').getAttribute('href') === '#') { e.preventDefault(); $('schoolHost').focus(); }
+};
+
+const looksLikeFeed = (t) => /^(https?|webcal):\/\/\S+\.ics(\?\S*)?$/i.test(t) || /^(https?|webcal):\/\/\S+\/feeds\/calendars\/\S+$/i.test(t);
+
+$('pasteCal').onclick = async () => {
+  $('pasteMsg').style.color = '';
+  let text = '';
+  try { text = (await navigator.clipboard.readText()).trim(); }
+  catch { $('pasteMsg').textContent = 'Press and hold in the box below, tap Paste, then Save.'; $('cal').focus(); return; }
+  if (!text) { $('pasteMsg').textContent = "Nothing's copied yet. Copy the Calendar Feed link in Canvas first."; return; }
+  if (!looksLikeFeed(text)) {
+    $('pasteMsg').style.color = 'var(--danger)';
+    $('pasteMsg').textContent = "That's not the calendar link. In Canvas, tap Calendar Feed and copy the link that ends in .ics.";
+    return;
+  }
+  $('cal').value = text;
+  $('pasteMsg').textContent = '';
+  $('settingsForm').requestSubmit(); // saves and imports right away
+};
+
 // ---------- add from screenshot ----------
 function toLocalInput(iso) {
   const d = new Date(iso), pad = (n) => String(n).padStart(2, '0');
@@ -585,6 +668,7 @@ function showApp() {
   $('remind').value = String(me.remindHours);
   if (!$('remind').value) $('remind').value = '24';
   $('cal').value = me.calendarUrl || '';
+  initCanvasHelper();
   $('weekly').checked = me.weeklySummary;
   loadList();
   $('testCard').classList.toggle('hidden', !(me.testMode && me.hasPhone));
@@ -728,6 +812,7 @@ $('settingsForm').onsubmit = async (e) => {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
     me = r.user;
     renderNotifications();
+    initCanvasHelper();
     $('setErr').style.color = 'var(--ok)';
     $('setErr').textContent = r.imported !== undefined ? `Saved. Imported ${r.imported} assignment${r.imported === 1 ? '' : 's'}.` : 'Saved.';
     loadList();

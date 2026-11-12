@@ -612,3 +612,26 @@ test('screenshot import moves on to another model when one is overloaded or reti
   await assert.rejects(scanScreenshot({ imageBase64: 'x', mimeType: 'image/jpeg', timezone: 'America/New_York' }), /isn't working right now/);
   assert.equal(tried.length, 1);
 });
+
+test('the old Render address sends people to stucal.site', async (t) => {
+  const server = app.listen(0);
+  const saved = { NODE_ENV: process.env.NODE_ENV, APP_URL: process.env.APP_URL };
+  t.after(() => { server.close(); Object.assign(process.env, saved); if (!saved.NODE_ENV) delete process.env.NODE_ENV; if (!saved.APP_URL) delete process.env.APP_URL; });
+  const port = server.address().port;
+  const get = (host, path = '/', method = 'GET') => new Promise((resolve) => {
+    require('node:http').request({ port, path, method, headers: { host } }, (res) => { res.resume(); resolve(res); }).end();
+  });
+
+  // not in production: nothing changes (local testing)
+  assert.equal((await get('stucal-abcd.onrender.com')).statusCode, 200);
+
+  process.env.NODE_ENV = 'production';
+  process.env.APP_URL = 'https://stucal.site';
+  const page = await get('stucal-abcd.onrender.com', '/privacy?x=1');
+  assert.equal(page.statusCode, 301);
+  assert.equal(page.headers.location, 'https://stucal.site/privacy?x=1');
+  const post = await get('stucal-abcd.onrender.com', '/api/sms/incoming', 'POST');
+  assert.equal(post.statusCode, 308); // keeps it a POST
+  // the real address is served normally
+  assert.equal((await get('stucal.site', '/terms')).statusCode, 200);
+});
