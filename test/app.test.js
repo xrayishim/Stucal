@@ -363,13 +363,15 @@ test('notification accounts: quick signup, reminders by notification, dead devic
   const test = await fetch(base + '/api/push/test', { method: 'POST', headers: { cookie } });
   assert.equal(test.status, 200);
   assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).get().n, 1);
-  assert.ok(pushes.some((p) => /Your week ahead: 1 assignment/.test(p.payload.title)));
+  assert.equal(pushes.length, 1); // the test shows just the next reminder, exactly as it will look
+  assert.match(pushes[0].payload.title, /^Due (today|tomorrow) at /);
+  assert.equal(pushes[0].payload.body, 'Research Paper Outline (English)');
 
-  // Sunday summary reaches notification-only accounts too
+  // no Sunday list for notification-only accounts: it'd be cut off on the lock screen
   db.exec(`UPDATE assignments SET due_at = '2026-11-17T04:59:00Z', reminded_at = NULL`);
   pushes.length = 0;
-  assert.equal(await sendWeeklySummaries(new Date('2026-11-15T23:30:00Z')), 1); // Sun 6:30 PM ET
-  assert.deepEqual(pushes[0].payload, { title: 'Your week ahead: 1 assignment', body: 'Mon: English: Research Paper Outline', url: '/' });
+  assert.equal(await sendWeeklySummaries(new Date('2026-11-15T23:30:00Z')), 0); // Sun 6:30 PM ET
+  assert.equal(pushes.length, 0);
 
   // Apple temporarily down: reminder is retried next minute rather than lost
   db.exec(`UPDATE assignments SET due_at = '${new Date(Date.now() + 3600e3).toISOString()}', reminded_at = NULL`);
@@ -397,4 +399,33 @@ test('the app can be installed: manifest, icons and service worker are served', 
   const sw = await fetch(base + '/sw.js');
   assert.match(sw.headers.get('content-type'), /javascript/);
   assert.match(await sw.text(), /showNotification/);
+});
+
+test('notifications: one per assignment, each at the time the person picked', async (t) => {
+  const notify = require('../src/notify');
+  const { sendDueReminders } = require('../src/reminders');
+  db.exec(`DELETE FROM users`);
+  db.prepare(`INSERT INTO users (id, timezone, remind_hours) VALUES (90, 'America/New_York', 3)`).run(); // "3 hours before"
+  db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (90, 'https://web.push.apple.com/x', 'k', 'a')`).run();
+  const add = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at) VALUES (90, ?, ?, ?)`);
+  const now = new Date('2026-11-20T23:00:00Z'); // Fri 6:00 PM ET
+  add.run('Chapter 7 Quiz', 'COP1000 MRG', '2026-11-21T01:30:00Z');    // 8:30 PM tonight: inside 3 hours
+  add.run('Research Paper Outline', 'ENC1101 MRG', '2026-11-21T01:59:00Z'); // 8:59 PM: inside 3 hours
+  add.run('Chapter 7 Project', 'COP1000 MRG', '2026-11-21T04:59:00Z'); // 11:59 PM: 6 hours away, not yet
+
+  const pushes = [];
+  t.mock.method(notify.webpush, 'sendNotification', async (sub, payload) => { pushes.push(JSON.parse(payload)); });
+  assert.equal(await sendDueReminders(now), 2);
+  assert.deepEqual(pushes.map((p) => [p.title, p.body]), [
+    ['Due today at 8:30 PM', 'Chapter 7 Quiz (Coding)'],
+    ['Due today at 8:59 PM', 'Research Paper Outline (English)'],
+  ]);
+  assert.ok(pushes.every((p) => p.tag));
+
+  // the project gets its own notification 3 hours before it's due, not earlier
+  pushes.length = 0;
+  assert.equal(await sendDueReminders(new Date('2026-11-21T01:00:00Z')), 0); // 8 PM
+  assert.equal(await sendDueReminders(new Date('2026-11-21T02:00:00Z')), 1); // 9 PM
+  assert.equal(pushes[0].body, 'Chapter 7 Project (Coding)');
+  assert.equal(await sendDueReminders(new Date('2026-11-21T02:05:00Z')), 0); // never twice
 });

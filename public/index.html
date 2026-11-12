@@ -235,7 +235,7 @@
       <div class="feature">
         <svg class="i"><use href="#i-cal"/></svg>
         <h3>Your week, simplified</h3>
-        <p>Every Sunday night, see everything due that week in one message.</p>
+        <p><span data-sms>Every Sunday night, see everything due that week in one text.</span><span data-push>See everything coming up in one simple list, sorted by due date.</span></p>
       </div>
     </div>
   </section>
@@ -247,7 +247,7 @@
       <li data-sms><div><b>Sign up with your phone number</b><span>We text you a code. No password.</span></div></li>
       <li data-push><div><b>Add StuCal to your Home Screen</b><span>On iPhone: tap Share, then "Add to Home Screen." No app store, no password.</span></div></li>
       <li><div><b>Paste your Canvas calendar link</b><span>Canvas → Calendar → Calendar Feed. Your assignments show up right away.</span></div></li>
-      <li><div><b>Get your reminders</b><span>Your week ahead every Sunday night, then a reminder the day before each thing is due.<span data-sms> Reply STOP anytime.</span></span></div></li>
+      <li><div><b>Get your reminders</b><span><span data-sms>Your week ahead every Sunday night, then a reminder the day before each thing is due. Reply STOP anytime.</span><span data-push>A notification for each assignment, at the time you pick: from 1 hour to 2 days before it's due.</span></span></div></li>
     </ol>
   </section>
 
@@ -340,7 +340,7 @@
         <option value="24">1 day before</option>
         <option value="48">2 days before</option>
       </select>
-      <label class="check mt"><input type="checkbox" id="weekly"> Sunday night summary of my week</label>
+      <label class="check mt" data-sms><input type="checkbox" id="weekly"> Sunday night summary of my week</label>
       <button class="btn mt">Save</button>
       <div class="err" id="setErr"></div>
     </form>
@@ -489,6 +489,10 @@ async function currentSubscription() {
   return reg.pushManager.getSubscription();
 }
 
+function timingText(hours) {
+  return { 1: '1 hour before', 3: '3 hours before', 12: '12 hours before', 24: '1 day before', 48: '2 days before' }[hours] || `${hours} hours before`;
+}
+
 async function renderNotifications() {
   const box = $('nState');
   $('nErr').textContent = '';
@@ -509,7 +513,7 @@ async function renderNotifications() {
   const sub = await currentSubscription().catch(() => null);
   if (sub) {
     box.innerHTML = `<p class="status on"><span class="dotc"></span>On for this device</p>
-      <p class="hint" style="margin:0 0 14px">You'll get a reminder ${me.remindHours === 24 ? 'the day before' : 'before'} each assignment is due${me.weeklySummary ? ', and your week ahead every Sunday at 6 PM' : ''}.</p>
+      <p class="hint" style="margin:0 0 14px">You'll get a notification ${timingText(me.remindHours)} each assignment is due. Change the timing under <b>Remind me</b> below.</p>
       <div class="btns"><button class="btn sm" id="nTest" type="button">Send me a test</button><button class="btn sm ghost" id="nOff" type="button">Turn off</button></div>`;
     $('nTest').onclick = sendTest;
     $('nOff').onclick = turnOff;
@@ -588,6 +592,7 @@ $('settingsForm').onsubmit = async (e) => {
     const r = await api('/api/me', { method: 'PATCH', body: { remindHours: Number($('remind').value), calendarUrl: $('cal').value, weeklySummary: $('weekly').checked,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
     me = r.user;
+    renderNotifications();
     $('setErr').style.color = 'var(--ok)';
     $('setErr').textContent = r.imported !== undefined ? `Saved. Imported ${r.imported} assignment${r.imported === 1 ? '' : 's'}.` : 'Saved.';
     loadList();

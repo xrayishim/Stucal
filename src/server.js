@@ -327,10 +327,16 @@ app.post('/api/push/unsubscribe', auth, (req, res) => {
 app.post('/api/push/test', auth, async (req, res) => {
   if (!allow([[`pushtest:${req.user.id}`, HOUR, 10]]).ok) return res.status(429).json({ error: 'That\'s enough tests for now. Try again later.' });
   if (!notify.hasPush(req.user)) return res.status(400).json({ error: 'Turn on notifications first.' });
-  const list = previews(req.user);
-  if (list.length === 1 && /Nothing due/.test(list[0].push.body)) {
-    list.unshift({ push: { title: "Notifications are on!", body: "You'll get a reminder the day before things are due.", url: '/' } });
+  // Shows exactly what the next real reminder will look like: one notification for one assignment.
+  const now = new Date();
+  const next = db.prepare(`SELECT * FROM assignments WHERE user_id = ? AND done = 0 AND due_at > ? ORDER BY due_at LIMIT 1`)
+    .get(req.user.id, now.toISOString());
+  let push = { title: 'Notifications are on!', body: "You'll get a reminder before each assignment is due.", url: '/' };
+  if (next) {
+    const sendAt = new Date(new Date(next.due_at).getTime() - req.user.remind_hours * 3600e3);
+    push = reminderPush([next], req.user.timezone, sendAt < now ? now : sendAt);
   }
+  const list = [{ push }];
   let delivered = 0;
   for (const p of list) delivered += (await notify.sendPush(req.user, p.push)).delivered;
   if (!delivered) return res.status(502).json({ error: "Couldn't send a notification. Try turning notifications off and on again." });

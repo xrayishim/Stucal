@@ -12,7 +12,9 @@ StuCal reminds students before their Canvas assignments are due, by phone notifi
 - **Connect Canvas once.** Students paste their Canvas calendar link. StuCal imports every assignment (skipping school-wide events like breaks), re-checks hourly, follows moved deadlines and drops deleted assignments. Blackboard, Moodle and Google Classroom calendar links work too.
 - **Plain subject names:** class codes like MAC1105 or POS2041 show as Math or Government.
 - **Add things Canvas doesn't have,** such as MyMathLab homework.
-- **Sunday night summary** at 6 PM local time (can be turned off), and a **day-before reminder** (or 1, 3, 12 or 48 hours). Assignments due the same day arrive together.
+- **Reminders at the time each person picks:** 1, 3, 12, 24 or 48 hours before something is due.
+  - **Notifications:** one short notification per assignment, so nothing gets cut off on the lock screen.
+  - **Texts:** assignments due the same day come in one text, and there's an optional Sunday night summary at 6 PM. The summary isn't sent as a notification because a long list doesn't fit.
 
 ### Finding your Canvas calendar link
 

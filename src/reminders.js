@@ -1,5 +1,5 @@
 const db = require('./db');
-const { notifyUser, reachable } = require('./notify');
+const { notifyUser, reachable, canText } = require('./notify');
 const { friendlyCourse } = require('./subjects');
 
 const SUMMARY_HOUR = 18;      // Sunday summary goes out at 6 PM local time
@@ -111,7 +111,20 @@ async function sendDueReminders(now = new Date()) {
     const tz = user.timezone;
     const ready = pending.filter((a) => new Date(a.due_at).getTime() - user.remind_hours * 3600e3 <= now.getTime());
     if (!ready.length) continue;
-    // Pull in anything else due the same day so it all arrives in one message.
+
+    // Notification-only: one short notification per assignment, right at the time they picked.
+    // (A bundled list gets cut off on a phone's lock screen.)
+    if (!canText(user)) {
+      for (const a of ready) {
+        markSent.run(nowIso, a.id); // mark first so a crash never double-sends
+        const result = await notifyUser(user, { push: { ...reminderPush([a], tz, now), tag: `a${a.id}` } });
+        if (result.delivered) sent++;
+        else if (result.retry) markSent.run(null, a.id); // try again next minute
+      }
+      continue;
+    }
+
+    // Texts: pull in anything else due the same day so it all arrives in one (cheaper) text.
     const days = new Set(ready.map((a) => dayKey(new Date(a.due_at), tz)));
     const batch = pending.filter((a) => days.has(dayKey(new Date(a.due_at), tz)));
 
@@ -167,7 +180,8 @@ async function sendWeeklySummaries(now = new Date()) {
     if (weekdayName(now, tz) !== 'Sunday' || localHour(now, tz) < SUMMARY_HOUR) continue;
     const today = dayKey(now, tz);
     if (u.last_summary_on === today) continue;
-    if (!reachable(u)) continue;
+    // The weekly list is too long to read in a notification, so it's for texts only.
+    if (!canText(u)) continue;
     // Skip people who never set anything up instead of sending them "nothing due" forever.
     if (!u.calendar_url && !hasAnything.get(u.id)) continue;
 
