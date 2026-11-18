@@ -206,7 +206,7 @@ app.post('/api/auth/quick', (req, res) => {
 
 // What this StuCal can do, so the page shows the right sign-up.
 app.get('/api/config', (req, res) => {
-  res.json({ sms: sms.live, testMode: TEST_MODE, pushKey: notify.publicKey, scan: scan.enabled() });
+  res.json({ sms: sms.live, testMode: TEST_MODE, pushKey: notify.publicKey, scan: scan.enabled(), contact: CONTACT_EMAIL || null });
 });
 
 app.post('/api/auth/logout', auth, (req, res) => {
