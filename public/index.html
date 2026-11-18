@@ -77,16 +77,13 @@
   .note b { display: block; }
   .note span.body { color: #d6dae6; }
 
-  .section { padding-top: 48px; padding-bottom: 8px; border-top: 1px solid var(--line); margin-top: 24px; }
-  .why p { max-width: 40em; font-size: 17px; }
-  .why .sign { color: var(--muted); }
-  .how { counter-reset: n; list-style: none; padding: 0; margin: 0; display: grid; gap: 28px; }
-  .how > li { counter-increment: n; display: grid; gap: 14px; }
-  @media (min-width: 860px) { .how > li.pic { grid-template-columns: 1fr 320px; align-items: start; gap: 40px; } }
-  .how h3 { font-size: 18px; margin: 0 0 6px; }
-  .how h3::before { content: counter(n) ". "; color: var(--blue-hi); }
-  .how p { color: #c9cfe0; margin: 0; max-width: 36em; }
-  .how img { width: 100%; max-width: 320px; border-radius: 18px; border: 1px solid var(--line); }
+  .section { padding-top: 40px; padding-bottom: 8px; border-top: 1px solid var(--line); margin-top: 16px; }
+  .steps3 { list-style: none; counter-reset: n; padding: 0; margin: 0; display: grid; gap: 14px; }
+  @media (min-width: 760px) { .steps3 { grid-template-columns: repeat(3, 1fr); gap: 24px; } }
+  .steps3 li { counter-increment: n; }
+  .steps3 b { display: block; font-size: 17px; }
+  .steps3 b::before { content: counter(n) ". "; color: var(--blue-hi); }
+  .steps3 span { color: var(--muted); font-size: 15px; }
   .faq details { border-bottom: 1px solid var(--line); padding: 14px 0; }
   .faq summary { cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text); margin: 0; }
   .faq details p { color: #c9cfe0; margin: 10px 0 0; max-width: 40em; }
@@ -147,6 +144,9 @@
   details.fold[open] .fold-next { display: none; }
   details.fold[open] > summary { margin-bottom: 12px; }
   details.fold.empty { display: none; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; margin-top: 14px; }
+  .seg button { border: 0; border-radius: 9px; padding: 9px 6px; background: transparent; color: var(--muted); font-weight: 600; font-size: 14px; }
+  .seg button.on { background: var(--surface-2); color: var(--text); }
   .helper { background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 4px 0 6px; }
   .helper .howto { margin-top: 14px; }
   .helper .howto .hint { margin: 4px 0 0; display: inline-block; }
@@ -186,50 +186,35 @@
   <section class="hero wrap">
     <div>
       <h1>Get a heads-up before your homework is due.</h1>
-      <p class="lead">StuCal grabs your assignments from Canvas, plus anything you screenshot from MyMathLab or other sites, and <span data-push>sends a notification to your phone</span><span data-sms>texts you</span> before it's due. Then a few more on the day it's due, so it's hard to forget.</p>
+      <p class="lead">Your Canvas assignments, plus anything you screenshot (like MyMathLab), with reminders on your phone.</p>
       <button class="btn" data-go="login">Set it up</button>
-      <p class="small">Free · <span data-push>iPhone and Android</span><span data-sms>works with any phone</span> · takes about a minute</p>
+      <p class="small">Free · takes about a minute</p>
     </div>
     <div class="lock" aria-label="What StuCal reminders look like on a phone">
       <div class="note"><img src="/icons/icon-180.png" alt=""><div><div class="top"><span>StuCal</span><span>Wed 7:00 PM</span></div><b>Due tomorrow at 11:59 PM</b><span class="body">Research Paper Outline (English)</span></div></div>
-      <div class="note"><img src="/icons/icon-180.png" alt=""><div><div class="top"><span>StuCal</span><span>Thu 3:00 PM</span></div><b>2 still due today</b><span class="body">Math: Section 4.4 HW (11:59 PM)<br>English: Research Paper Outline (11:59 PM)</span></div></div>
       <div class="note"><img src="/icons/icon-180.png" alt=""><div><div class="top"><span>StuCal</span><span>Thu 11:00 PM</span></div><b>⏰ Due in 59 minutes</b><span class="body">Section 4.4 HW (Math), 11:59 PM</span></div></div>
     </div>
   </section>
 
-  <section class="section wrap why">
-    <h2>Why I made this</h2>
-    <p>My math homework is on MyMathLab, and my teacher doesn't put it on Canvas. Canvas doesn't really remind you about anything either. I kept finding out about assignments the night they were due, so I made StuCal for me and my friends.</p>
-    <p class="sign">A student at Seminole State</p>
-  </section>
-
   <section class="section wrap" id="how">
     <h2>How it works</h2>
-    <ol class="how">
-      <li data-push><div><h3>Add StuCal to your Home Screen</h3><p>On iPhone, open stucal.site in Safari, tap Share, then Add to Home Screen. On Android, just open it in Chrome. No app store, no account, no password.</p></div></li>
-      <li data-sms><div><h3>Sign up with your phone number</h3><p>You get a texted code. No password.</p></div></li>
-      <li><div><h3>Connect Canvas</h3><p>In the Canvas app, tap ☰ → Settings → Subscribe to Calendar, copy the link and paste it into StuCal. Your assignments show up, and new ones come in on their own. School events like breaks and graduation are left out.</p></div></li>
-      <li class="pic"><div><h3>Add what Canvas doesn't have</h3><p>Screenshot your MyMathLab assignment list (or a syllabus, or anything with due dates) and StuCal reads the names and dates. You check them, then tap Add. Anything already past due is skipped.</p></div><img src="/img/app-scan.png" alt="StuCal showing three MyMathLab assignments it read from a screenshot" loading="lazy"></li>
-      <li class="pic"><div><h3>Get reminders</h3><p>The day before something's due (or whenever you pick), then on the day it's due at 8 AM, 12 PM, 3 PM, 9 PM and 11 PM. Check it off when you're done and they stop.</p></div><img src="/img/app-list.png" alt="StuCal's list of upcoming assignments" loading="lazy"></li>
+    <ol class="steps3">
+      <li data-push><b>Add it to your Home Screen</b><span>No app store or password</span></li>
+      <li data-sms><b>Sign up with your number</b><span>No password</span></li>
+      <li><b>Connect Canvas</b><span>From your phone or computer</span></li>
+      <li><b>Screenshot everything else</b><span>MyMathLab, a syllabus, anything with due dates</span></li>
     </ol>
   </section>
 
   <section class="section wrap faq">
     <h2>Questions</h2>
     <details><summary>Is it free?</summary><p>Yes. No ads, no card.</p></details>
-    <details><summary>Do I have to give it my Canvas password?</summary><p>No. StuCal only uses your Canvas calendar link, which has assignment names and due dates. It can't see your grades or turn anything in.</p></details>
-    <details><summary>Does it work on Android?</summary><p>Yes. Open stucal.site in Chrome and turn on notifications.</p></details>
-    <details><summary>My teacher doesn't use Canvas for homework.</summary><p>Screenshot wherever the homework is posted (MyMathLab, McGraw Hill, a syllabus) and StuCal reads the due dates from it.</p></details>
-    <details><summary>What happens to my stuff?</summary><p>It's only used to remind you. Screenshots aren't saved. You can delete your account anytime. The <a href="/privacy">privacy page</a> has the details.</p></details>
-    <details><summary>Something's broken or I have an idea.</summary><p>Tell me! <span id="contactLine">Email me and I'll take a look.</span></p></details>
-    <p style="margin-top:28px"><button class="btn" data-go="login">Set it up</button></p>
+    <details><summary>Do you need my Canvas password?</summary><p>No. StuCal only uses your Canvas calendar link (assignment names and due dates). It can't see grades. <a href="/privacy">Privacy</a></p></details>
+    <details><summary>Who made this?</summary><p>A student at Seminole State who kept missing MyMathLab homework. <span id="contactLine"></span></p></details>
   </section>
 
   <footer>
-    <div class="wrap">
-      <p>StuCal is a student project. It isn't made by or affiliated with Instructure (Canvas), Pearson or Seminole State.</p>
-      <p><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a><span id="footerContact"></span></p>
-    </div>
+    <div class="wrap"><p>A student project, not affiliated with Canvas, Pearson or Seminole State · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a><span id="footerContact"></span></p></div>
   </footer>
 </main>
 
@@ -306,11 +291,21 @@
         <label for="schoolHost">Your school's Canvas address</label>
         <input id="schoolHost" inputmode="url" autocapitalize="off" autocorrect="off" placeholder="yourschool.instructure.com">
       </div>
-      <ol class="howto">
+      <div class="seg" role="tablist">
+        <button type="button" role="tab" id="tabPhone">On my phone</button>
+        <button type="button" role="tab" id="tabPc">On a computer</button>
+      </div>
+      <ol class="howto" id="stepsPhone">
         <li><div><a class="btn sm" id="openCanvas">Open the Canvas app</a><br><span class="hint" id="openHint">Don't have it? Get <b>Canvas Student</b> from the App Store.</span></div></li>
         <li><div>Tap the <b>three lines ☰</b> at the top left, then tap <b>Settings</b>.</div></li>
         <li><div>Tap <b>Subscribe to Calendar</b>, then copy that link.</div></li>
-        <li><div>Come back to StuCal and tap:<br><button class="btn sm mt" id="pasteCal" type="button">Paste my link</button></div></li>
+        <li><div>Come back to StuCal and tap:<br><button class="btn sm mt paste" type="button">Paste my link</button></div></li>
+      </ol>
+      <ol class="howto hidden" id="stepsPc">
+        <li><div><a class="btn sm" id="openCanvasWeb" target="_blank" rel="noopener">Open my Canvas calendar</a><br><span class="hint">Log in if Canvas asks.</span></div></li>
+        <li><div>Click <b>Calendar Feed</b> at the bottom right of the calendar page.</div></li>
+        <li><div>Copy the link in the box that pops up.</div></li>
+        <li><div>Come back to this tab and click:<br><button class="btn sm mt paste" type="button">Paste my link</button></div></li>
       </ol>
       <p class="hint" id="pasteMsg"></p>
     </div>
@@ -453,6 +448,8 @@ function updateCanvasLink() {
   // The Canvas Student app's own link type. A normal https link would open inside StuCal's
   // built-in browser on iPhone instead of handing off to the app.
   $('openCanvas').href = ok ? `canvas-courses://${host}/calendar` : '#';
+  $('openCanvasWeb').href = ok ? `https://${host}/calendar` : '#';
+  $('openCanvasWeb').style.opacity = ok ? '' : '.5';
   $('openCanvas').classList.toggle('disabled', !ok);
   $('openCanvas').style.opacity = ok ? '' : '.5';
   saveSchool({ choice: $('school').value, host: $('schoolHost').value });
@@ -474,6 +471,20 @@ function initCanvasHelper() {
 
 $('school').onchange = updateCanvasLink;
 $('schoolHost').oninput = updateCanvasLink;
+// Phone: the Canvas app's "Subscribe to Calendar". Computer: the Canvas website's "Calendar Feed".
+function showSteps(where) {
+  $('tabPhone').classList.toggle('on', where === 'phone');
+  $('tabPc').classList.toggle('on', where === 'pc');
+  $('stepsPhone').classList.toggle('hidden', where !== 'phone');
+  $('stepsPc').classList.toggle('hidden', where !== 'pc');
+}
+$('tabPhone').onclick = () => showSteps('phone');
+$('tabPc').onclick = () => showSteps('pc');
+showSteps(isIOS || /Android/i.test(navigator.userAgent) ? 'phone' : 'pc');
+$('openCanvasWeb').onclick = (e) => {
+  if ($('openCanvasWeb').getAttribute('href') === '#') { e.preventDefault(); $('schoolHost').focus(); }
+};
+
 $('openCanvas').onclick = (e) => {
   if ($('openCanvas').getAttribute('href') === '#') { e.preventDefault(); $('schoolHost').focus(); return; }
   // If the Canvas app didn't open (not installed, or the phone blocked it), StuCal is still on screen.
@@ -487,21 +498,22 @@ $('openCanvas').onclick = (e) => {
 
 const looksLikeFeed = (t) => /^(https?|webcal):\/\/\S+\.ics(\?\S*)?$/i.test(t) || /^(https?|webcal):\/\/\S+\/feeds\/calendars\/\S+$/i.test(t);
 
-$('pasteCal').onclick = async () => {
+const pasteLink = async () => {
   $('pasteMsg').style.color = '';
   let text = '';
   try { text = (await navigator.clipboard.readText()).trim(); }
   catch { $('pasteMsg').textContent = 'Press and hold in the box below, tap Paste, then Save.'; $('cal').focus(); return; }
-  if (!text) { $('pasteMsg').textContent = "Nothing's copied yet. In the Canvas app, go to ☰ → Settings → Subscribe to Calendar and copy the link first."; return; }
+  if (!text) { $('pasteMsg').textContent = "Nothing's copied yet. Follow the steps above to copy your calendar link first."; return; }
   if (!looksLikeFeed(text)) {
     $('pasteMsg').style.color = 'var(--danger)';
-    $('pasteMsg').textContent = "That's not the calendar link. In the Canvas app, go to ☰ → Settings → Subscribe to Calendar and copy that link.";
+    $('pasteMsg').textContent = "That's not the calendar link. Follow the steps above and copy the link it shows (it ends in .ics).";
     return;
   }
   $('cal').value = text;
   $('pasteMsg').textContent = '';
   $('settingsForm').requestSubmit(); // saves and imports right away
 };
+document.querySelectorAll('.paste').forEach((b) => { b.onclick = pasteLink; });
 
 // ---------- add from screenshot ----------
 function toLocalInput(iso) {
@@ -807,7 +819,7 @@ $('deleteBtn').onclick = async () => {
   document.body.classList.toggle('mode-push', pushMode());
   if (config.contact) {
     const mail = document.createElement('a'); mail.href = `mailto:${config.contact}`; mail.textContent = config.contact;
-    $('contactLine').textContent = 'Email me at '; $('contactLine').append(mail, '.');
+    $('contactLine').textContent = 'Ideas or problems? '; $('contactLine').append(mail);
     $('footerContact').append(' · ', Object.assign(mail.cloneNode(true), { textContent: 'Contact' }));
   }
   try {
