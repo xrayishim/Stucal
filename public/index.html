@@ -383,6 +383,7 @@
         <option value="24">1 day before</option>
         <option value="48">2 days before</option>
       </select>
+      <label class="check mt" data-push><input type="checkbox" id="dueDay"> Extra reminders on the day it's due (8 AM, 12 PM, 3 PM, 9 PM, 11 PM)</label>
       <label class="check mt" data-sms><input type="checkbox" id="weekly"> Sunday night summary of my week</label>
       <button class="btn mt">Save</button>
       <div class="err" id="setErr"></div>
@@ -680,6 +681,7 @@ function showApp() {
   $('cal').value = me.calendarUrl || '';
   initCanvasHelper();
   $('weekly').checked = me.weeklySummary;
+  $('dueDay').checked = me.dueDayNudges;
   loadList();
   $('testCard').classList.toggle('hidden', !(me.testMode && me.hasPhone));
   if (me.testMode && me.hasPhone) loadOutbox();
@@ -818,7 +820,7 @@ $('addForm').onsubmit = async (e) => {
 $('settingsForm').onsubmit = async (e) => {
   e.preventDefault(); $('setErr').textContent = '';
   try {
-    const r = await api('/api/me', { method: 'PATCH', body: { remindHours: Number($('remind').value), calendarUrl: $('cal').value, weeklySummary: $('weekly').checked,
+    const r = await api('/api/me', { method: 'PATCH', body: { remindHours: Number($('remind').value), calendarUrl: $('cal').value, weeklySummary: $('weekly').checked, dueDayNudges: $('dueDay').checked,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } });
     me = r.user;
     renderNotifications();

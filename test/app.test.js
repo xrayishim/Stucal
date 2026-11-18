@@ -647,3 +647,45 @@ test('the old Render address sends people to stucal.site', async (t) => {
   // the real address is served normally
   assert.equal((await get('stucal.site', '/terms')).statusCode, 200);
 });
+
+test('due-day reminders at 8 AM, 12 PM, 3 PM, 9 PM and 11 PM, only before the deadline', async (t) => {
+  const notify = require('../src/notify');
+  const { sendDueDayNudges, sendDueReminders } = require('../src/reminders');
+  db.exec(`DELETE FROM users`);
+  db.prepare(`INSERT INTO users (id, timezone, remind_hours) VALUES (95, 'America/New_York', 24)`).run();
+  db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (95, 'https://web.push.apple.com/z', 'k', 'a')`).run();
+  const add = db.prepare(`INSERT INTO assignments (user_id, title, course, due_at) VALUES (95, ?, ?, ?)`);
+  add.run('Research Paper Outline', 'ENC1101 MRG', '2026-11-21T04:59:00Z'); // Fri Nov 20, 11:59 PM ET
+  add.run('Chapter 7 Quiz', 'COP1000 MRG', '2026-11-20T20:00:00Z');         // Fri Nov 20, 3:00 PM ET
+  const pushes = [];
+  t.mock.method(notify.webpush, 'sendNotification', async (sub, payload) => { pushes.push(JSON.parse(payload)); });
+  const at = (et) => new Date(`2026-11-20T${et}:00-05:00`); // Eastern time on Fri Nov 20
+  const run = async (et) => { pushes.length = 0; await sendDueDayNudges(at(et)); return pushes.map((p) => `${p.title} | ${p.body}`); };
+
+  assert.deepEqual(await run('07:59'), []); // not yet
+  assert.deepEqual(await run('08:00'), ['2 assignments due today | Coding: Chapter 7 Quiz (3:00 PM)\nEnglish: Research Paper Outline (11:59 PM)']);
+  assert.deepEqual(await run('08:30'), []); // once per time slot
+  assert.deepEqual(await run('12:01'), ['2 still due today | Coding: Chapter 7 Quiz (3:00 PM)\nEnglish: Research Paper Outline (11:59 PM)']);
+  // 3 PM: the quiz is due right now, so only the paper
+  assert.deepEqual(await run('15:00'), ['Due in 8 hours | Research Paper Outline (English), 11:59 PM']);
+  // they finish the paper: no more reminders for it
+  db.exec(`UPDATE assignments SET done = 1 WHERE title = 'Research Paper Outline'`);
+  assert.deepEqual(await run('21:00'), []);
+  db.exec(`UPDATE assignments SET done = 0 WHERE title = 'Research Paper Outline'`);
+  assert.deepEqual(await run('21:05'), ['Due in 2 hours | Research Paper Outline (English), 11:59 PM']);
+  assert.deepEqual(await run('23:00'), ['⏰ Due in 59 minutes | Research Paper Outline (English), 11:59 PM']);
+  // a server that was down at 12 PM doesn't send a stale 12 PM reminder at 1 PM
+  db.exec(`UPDATE assignments SET nudges_sent = 0`);
+  assert.deepEqual(await run('13:30'), []);
+
+  // the regular reminder doesn't double up right after a due-day one
+  db.exec(`UPDATE users SET remind_hours = 1; UPDATE assignments SET reminded_at = NULL, nudges_sent = 0, last_nudge_at = NULL`);
+  pushes.length = 0;
+  await sendDueReminders(at('22:59'));
+  assert.equal(pushes.length, 1); // regular 1-hour reminder at 10:59 PM
+  assert.deepEqual(await run('23:00'), []); // so the 11 PM one is skipped a minute later
+
+  // turned off in settings
+  db.exec(`UPDATE users SET due_day_nudges = 0; UPDATE assignments SET nudges_sent = 0, reminded_at = NULL`);
+  assert.deepEqual(await run('21:00'), []);
+});

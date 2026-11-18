@@ -1,6 +1,7 @@
 const db = require('./db');
-const { notifyUser, reachable, canText } = require('./notify');
+const { notifyUser, reachable, canText, hasPush } = require('./notify');
 const { friendlyCourse } = require('./subjects');
+const { zonedToUtc } = require('./calendar');
 
 const SUMMARY_HOUR = 18;      // Sunday summary goes out at 6 PM local time
 const SUMMARY_MAX_ITEMS = 12; // keep the text short enough to read (and cheap to send)
@@ -109,7 +110,11 @@ async function sendDueReminders(now = new Date()) {
     // Nobody to tell yet (no notifications turned on, texted STOP): leave it for when they are.
     if (!user || !reachable(user)) continue;
     const tz = user.timezone;
-    const ready = pending.filter((a) => new Date(a.due_at).getTime() - user.remind_hours * 3600e3 <= now.getTime());
+    let ready = pending.filter((a) => new Date(a.due_at).getTime() - user.remind_hours * 3600e3 <= now.getTime());
+    // A due-day reminder for it went out in the last 45 minutes: count that as this reminder instead of pinging twice.
+    const justNudged = (a) => a.last_nudge_at && now - new Date(a.last_nudge_at) < 45 * 60e3;
+    for (const a of ready.filter(justNudged)) markSent.run(nowIso, a.id);
+    ready = ready.filter((a) => !justNudged(a));
     if (!ready.length) continue;
     // Pull in anything else due the same day so it all arrives in one message.
     const days = new Set(ready.map((a) => dayKey(new Date(a.due_at), tz)));
@@ -119,6 +124,69 @@ async function sendDueReminders(now = new Date()) {
     const result = await notifyUser(user, { text: reminderText(batch, tz, now), push: reminderPush(batch, tz, now) });
     if (result.delivered) sent++;
     else if (result.retry) for (const a of batch) markSent.run(null, a.id); // try again next minute
+  }
+  return sent;
+}
+
+// ---------- extra reminders on the due day ----------
+// On the day something is due: 8 AM, 12 PM, 3 PM, 9 PM and 11 PM (local time),
+// skipping any that come at or after the deadline. Notifications only (texts would add up fast).
+const NUDGE_HOURS = [8, 12, 15, 21, 23];
+
+function timeLeft(due, now) {
+  const mins = Math.max(1, Math.floor((due - now) / 60e3));
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'}`;
+  const hours = Math.floor(mins / 60);
+  return `${hours} hour${hours === 1 ? '' : 's'}`;
+}
+
+function nudgePush(items, tz, now, slot) {
+  const urgent = slot === NUDGE_HOURS.length - 1 ? '⏰ ' : '';
+  const time = (a) => timeText(new Date(a.due_at), tz);
+  if (items.length === 1) {
+    const a = items[0];
+    const course = friendlyCourse(a.course);
+    const what = course ? `${a.title} (${course})` : a.title;
+    if (slot === 0) return { title: `Due today at ${time(a)}`, body: what, url: '/' };
+    return { title: `${urgent}Due in ${timeLeft(new Date(a.due_at), now)}`, body: `${what}, ${time(a)}`, url: '/' };
+  }
+  const lines = items.slice(0, PUSH_MAX_LINES).map((a) => `${label(a)} (${time(a)})`);
+  if (items.length > PUSH_MAX_LINES) lines.push(`+${items.length - PUSH_MAX_LINES} more`);
+  const title = slot === 0 ? `${items.length} assignments due today` : `${urgent}${items.length} still due today`;
+  return { title, body: lines.join('\n'), url: '/' };
+}
+
+const nudgeUsers = db.prepare(`SELECT * FROM users WHERE due_day_nudges = 1`);
+const dueSoon = db.prepare(`
+  SELECT * FROM assignments WHERE user_id = ? AND done = 0 AND due_at > ? AND due_at <= ? ORDER BY due_at
+`);
+const markNudge = db.prepare(`UPDATE assignments SET nudges_sent = ?, last_nudge_at = ? WHERE id = ?`);
+
+async function sendDueDayNudges(now = new Date()) {
+  let sent = 0;
+  for (const user of nudgeUsers.all()) {
+    if (!hasPush(user)) continue;
+    const tz = user.timezone;
+    const hour = localHour(now, tz);
+    const slot = NUDGE_HOURS.indexOf(hour); // only during the hour each reminder is due, so a late server never sends old ones
+    if (slot === -1) continue;
+    const today = dayKey(now, tz);
+    const bit = 1 << slot;
+    const [y, m, d] = today.split('-').map(Number);
+    const slotTime = zonedToUtc(y, m, d, NUDGE_HOURS[slot], 0, 0, tz);
+
+    const due = dueSoon.all(user.id, now.toISOString(), new Date(now.getTime() + 864e5).toISOString())
+      .filter((a) => dayKey(new Date(a.due_at), tz) === today && !(a.nudges_sent & bit) && new Date(a.due_at) > slotTime);
+    if (!due.length) continue;
+    // The regular reminder just went out for some of these: skip them this time instead of pinging twice.
+    const recent = (a) => a.reminded_at && now - new Date(a.reminded_at) < 45 * 60e3;
+    const items = due.filter((a) => !recent(a));
+    for (const a of due) markNudge.run(a.nudges_sent | bit, items.includes(a) ? now.toISOString() : a.last_nudge_at, a.id);
+    if (!items.length) continue;
+
+    const result = await notifyUser(user, { push: nudgePush(items, tz, now, slot) });
+    if (result.delivered) sent++;
+    else if (result.retry) for (const a of items) markNudge.run(a.nudges_sent, a.last_nudge_at, a.id); // try again next minute
   }
   return sent;
 }
@@ -182,5 +250,5 @@ async function sendWeeklySummaries(now = new Date()) {
 }
 
 module.exports = {
-  sendDueReminders, sendWeeklySummaries, reminderText, summaryText, reminderPush, summaryPush, whenText, weekFor,
+  sendDueReminders, sendDueDayNudges, sendWeeklySummaries, nudgePush, reminderText, summaryText, reminderPush, summaryPush, whenText, weekFor,
 };

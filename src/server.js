@@ -5,7 +5,7 @@ const db = require('./db');
 const sms = require('./sms');
 const calendar = require('./calendar');
 const { friendlyCourse } = require('./subjects');
-const { sendDueReminders, sendWeeklySummaries, reminderText, summaryText, reminderPush, summaryPush, weekFor } = require('./reminders');
+const { sendDueReminders, sendDueDayNudges, sendWeeklySummaries, reminderText, summaryText, reminderPush, summaryPush, weekFor } = require('./reminders');
 const notify = require('./notify');
 const scan = require('./scan');
 
@@ -116,6 +116,7 @@ function publicUser(u) {
     remindHours: u.remind_hours,
     calendarUrl: u.calendar_url,
     weeklySummary: Boolean(u.weekly_summary),
+    dueDayNudges: Boolean(u.due_day_nudges),
     testMode: TEST_MODE,
   };
 }
@@ -218,7 +219,10 @@ app.post('/api/auth/logout', auth, (req, res) => {
 app.get('/api/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
 
 app.patch('/api/me', auth, async (req, res) => {
-  const { remindHours, timezone, calendarUrl, weeklySummary } = req.body;
+  const { remindHours, timezone, calendarUrl, weeklySummary, dueDayNudges } = req.body;
+  if (dueDayNudges !== undefined) {
+    db.prepare(`UPDATE users SET due_day_nudges = ? WHERE id = ?`).run(dueDayNudges ? 1 : 0, req.user.id);
+  }
   if (weeklySummary !== undefined) {
     db.prepare(`UPDATE users SET weekly_summary = ? WHERE id = ?`).run(weeklySummary ? 1 : 0, req.user.id);
   }
@@ -444,7 +448,8 @@ if (require.main === module) {
   const tick = async () => {
     if (running) return; // a slow minute shouldn't overlap the next one
     running = true;
-    await sendDueReminders().catch(console.error);     // day-before reminders
+    await sendDueReminders().catch(console.error);     // reminder at the time each person picked
+    await sendDueDayNudges().catch(console.error);     // 8 AM, 12, 3, 9 and 11 PM on the due day
     await sendWeeklySummaries().catch(console.error);  // Sunday 6 PM "your week ahead"
     db.prepare(`DELETE FROM rate_events WHERE at < ?`).run(Date.now() - 2 * DAY);
     running = false;

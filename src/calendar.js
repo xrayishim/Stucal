@@ -72,6 +72,7 @@ const upsert = db.prepare(`
     course = excluded.course,
     -- if the teacher moved the deadline, allow a fresh reminder
     reminded_at = CASE WHEN assignments.due_at != excluded.due_at THEN NULL ELSE assignments.reminded_at END,
+    nudges_sent = CASE WHEN assignments.due_at != excluded.due_at THEN 0 ELSE assignments.nudges_sent END,
     due_at = excluded.due_at
 `);
 

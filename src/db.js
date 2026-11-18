@@ -73,6 +73,9 @@ for (const sql of [
   `ALTER TABLE users ADD COLUMN weekly_summary INTEGER NOT NULL DEFAULT 1`, // Sunday night text on/off
   `ALTER TABLE users ADD COLUMN last_summary_on TEXT`,                      // local date of last Sunday text
   `ALTER TABLE users ADD COLUMN opted_out INTEGER NOT NULL DEFAULT 0`,      // texted STOP
+  `ALTER TABLE users ADD COLUMN due_day_nudges INTEGER NOT NULL DEFAULT 1`, // extra reminders on the due day on/off
+  `ALTER TABLE assignments ADD COLUMN nudges_sent INTEGER NOT NULL DEFAULT 0`, // which due-day reminders went out (one bit each)
+  `ALTER TABLE assignments ADD COLUMN last_nudge_at TEXT`,                  // when the last due-day reminder went out
 ]) {
   try { db.exec(sql); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
 }
